@@ -3148,7 +3148,8 @@ static void frameMouseDown(WObjDescriptor *desc, XEvent *event)
 				 GrabModeAsync, GrabModeAsync, None, None, CurrentTime) != GrabSuccess) {
 			return;
 		}
-		if (event->xbutton.button == Button3) {
+		if (event->xbutton.button == Button3 ||
+		    (event->xbutton.button == Button1 && (event->xbutton.state & ControlMask))) {
 			wMouseResizeWindow(wwin, event);
 		} else if (event->xbutton.button == Button4) {
 			new_height = wwin->client.height - resize_height_increment;
