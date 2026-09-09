@@ -852,6 +852,17 @@ WWindow *wManageWindow(WScreen *scr, Window window)
 	 */
 	wWindowSetupInitialAttributes(wwin, &window_level, &workspace);
 
+	/* Modern clients may omit both group hints and WM_CLIENT_LEADER.
+	 * A matching launcher still needs a WApplication for activation and
+	 * urgency handling. Respect explicit per-window preferences. */
+	if (wwin->main_window == None && !WFLAGP(wwin, no_appicon) &&
+	    !wwin->defined_user_flags.emulate_appicon &&
+	    (wwin->transient_for == None || wwin->transient_for == scr->root_win) &&
+	    wDockHasLauncher(scr, wwin->wm_instance, wwin->wm_class)) {
+		wwin->user_flags.emulate_appicon = 1;
+		wwin->defined_user_flags.emulate_appicon = 1;
+	}
+
 	/* Make broken apps behave as a nice app. */
 	if (WFLAGP(wwin, emulate_appicon))
 		wwin->main_window = wwin->client_win;

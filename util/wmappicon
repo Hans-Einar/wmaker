@@ -1,0 +1,86 @@
+#!/bin/sh
+set -eu
+
+helper_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+usage() {
+    cat <<'EOF'
+Usage:
+  wmappicon FILE.desktop
+  wmappicon --save-icon-state
+  wmappicon -s
+  wmappicon --help
+
+Create a Window Maker Clip icon from a .desktop file without starting the
+application. The icon is omnipresent.
+
+Options:
+  -s, --save-icon-state  Save Dock/Clip icon positions to WMState
+  -h, --help             Show this help
+EOF
+}
+
+case "${1:-}" in
+    -h|--help)
+        usage
+        exit 0
+        ;;
+    -s|--save-icon-state)
+        exec "$helper_dir/wmappicon-ipc" --save
+        ;;
+    '')
+        usage >&2
+        exit 2
+        ;;
+esac
+
+desktop=$1
+
+get_key() {
+    awk -F= -v key="$1" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "$desktop"
+}
+
+name=$(get_key Name)
+exec_line=$(get_key Exec)
+icon=$(get_key Icon)
+[ -n "$name" ] || name=$(basename "$desktop" .desktop)
+[ -n "$exec_line" ] || { echo "wmappicon: Exec mangler i $desktop" >&2; exit 1; }
+
+command=$(printf '%s\n' "$exec_line" | sed -E 's/%[fFuUdDnNickvm]//g; s/[[:space:]]+$//')
+startup_wm_class=$(get_key StartupWMClass)
+window_class=$(get_key X-WindowClass)
+
+resolve_icon() {
+    case "$icon" in
+        /*) printf '%s\n' "$icon"; return ;;
+    esac
+    for candidate in \
+        "/usr/share/pixmaps/$icon.png" \
+        "/usr/share/pixmaps/$icon.svg" \
+        "/usr/share/icons/hicolor/48x48/apps/$icon.png" \
+        "/usr/share/icons/hicolor/64x64/apps/$icon.png" \
+        "/usr/share/icons/hicolor/128x128/apps/$icon.png" \
+        "/usr/share/icons/hicolor/scalable/apps/$icon.svg"; do
+        [ -r "$candidate" ] && { printf '%s\n' "$candidate"; return; }
+    done
+    find /usr/share/icons -type f \( -name "$icon.png" -o -name "$icon.svg" \) -readable -print -quit 2>/dev/null
+}
+
+icon_file=$(resolve_icon)
+[ -n "$icon_file" ] || { echo "wmappicon: fant ikke ikon '$icon'" >&2; exit 1; }
+safe_name=$(printf '%s' "$(basename "$desktop" .desktop)" | tr -c '[:alnum:]_' '_' | sed 's/_$//')
+window_instance=$startup_wm_class
+
+# ChatGPT is an Electron application. Its instance contains the profile
+# path, so its stable identifier is the WM_CLASS class instead.
+if [ -z "$window_class" ] && [ "$command" = "chatgpt" ]; then
+    window_class=Chatgpt
+fi
+
+if [ -z "$window_instance" ] && [ -z "$window_class" ]; then
+    window_instance=$safe_name
+fi
+
+payload=$(printf '%s\n%s\n%s\n%s\n%s' \
+    "$name" "$window_instance" "$window_class" "$command" "$icon_file")
+exec "$helper_dir/wmappicon-ipc" "$payload"

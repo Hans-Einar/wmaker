@@ -348,6 +348,7 @@ typedef struct _WScreen {
 
 WScreen *wScreenInit(int screen_number);
 void wScreenSaveState(WScreen *scr);
+void wScreenSaveDockState(WScreen *scr);
 void wScreenRestoreState(WScreen *scr);
 
 int wScreenBringInside(WScreen *scr, int *x, int *y, int width, int height);

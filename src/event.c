@@ -1026,6 +1026,46 @@ static void handlePropertyNotify(XEvent * event)
 	}
 }
 
+static void handleDockLauncherCommand(void)
+{
+	Atom property;
+	Atom actual_type;
+	int actual_format;
+	unsigned long nitems, bytes_after;
+	unsigned char *data = NULL;
+	char *fields[5];
+	char *cursor;
+	int i;
+
+	property = XInternAtom(dpy, "_WINDOWMAKER_DOCK_LAUNCHER", False);
+	if (XGetWindowProperty(dpy, DefaultRootWindow(dpy), property, 0, 4096,
+	                       True, XA_STRING, &actual_type, &actual_format,
+	                       &nitems, &bytes_after, &data) != Success ||
+	    !data || actual_type != XA_STRING || actual_format != 8 || nitems == 0)
+		goto out;
+
+	data[nitems] = '\0';
+	cursor = (char *)data;
+	for (i = 0; i < 5; i++) {
+		fields[i] = cursor;
+		cursor = strchr(cursor, '\n');
+		if (!cursor && i < 4)
+			goto out;
+		if (cursor)
+			*cursor++ = '\0';
+	}
+
+	{
+		WScreen *scr = wScreenForRootWindow(DefaultRootWindow(dpy));
+		if (scr)
+			wDockAddLauncher(scr, fields[1], fields[2], fields[3], fields[4]);
+	}
+
+out:
+	if (data)
+		XFree(data);
+}
+
 static void handleClientMessage(XEvent * event)
 {
 	WWindow *wwin;
@@ -1060,7 +1100,11 @@ static void handleClientMessage(XEvent * event)
 		command = wmalloc(len + 1);
 		strncpy(command, event->xclient.data.b, len);
 
-		if (strncmp(command, "Reconfigure", sizeof("Reconfigure")) == 0) {
+		if (strncmp(command, "DockLauncher", sizeof("DockLauncher") - 1) == 0) {
+			handleDockLauncherCommand();
+		} else if (strncmp(command, "SaveDockState", sizeof("SaveDockState") - 1) == 0) {
+			wScreenSaveDockState(wScreenForRootWindow(DefaultRootWindow(dpy)));
+		} else if (strncmp(command, "Reconfigure", sizeof("Reconfigure")) == 0) {
 			wwarning(_("Got Reconfigure command"));
 			wDefaultsCheckDomains(NULL);
 		} else {

@@ -1490,7 +1490,8 @@ static WMPropList *make_icon_state(WAppIcon *btn)
 
 		lock = btn->lock ? dYes : dNo;
 
-		tmp = EscapeWM_CLASS(btn->wm_instance, btn->wm_class);
+		tmp = EscapeWM_CLASS(btn->wm_instance ? btn->wm_instance : "",
+		                     btn->wm_class ? btn->wm_class : "");
 
 		name = WMCreatePLString(tmp);
 
@@ -2267,6 +2268,106 @@ Bool wDockAttachIcon(WDock *dock, WAppIcon *icon, int x, int y, Bool update_icon
 		snprintf(icon->paste_command, len, "%s %%s", icon->command);
 	}
 
+	return True;
+}
+
+/* A single desktop-file hint can describe either WM_CLASS component. */
+static Bool launcherMatches(WAppIcon *icon, const char *instance, const char *class)
+{
+	const char *in = icon->wm_instance;
+	const char *cl = icon->wm_class;
+	if (in && !*in) in = NULL;
+	if (cl && !*cl) cl = NULL;
+	if (!in && !cl) return False;
+	if (!in || !cl) {
+		const char *hint = in ? in : cl;
+		return (instance && !strcasecmp(hint, instance)) ||
+		       (class && !strcasecmp(hint, class));
+	}
+	return instance && class && !strcmp(in, instance) && !strcmp(cl, class);
+}
+
+Bool wDockHasLauncher(WScreen *scr, const char *instance, const char *class)
+{
+	WAppIcon *icon;
+	for (icon = scr->app_icon_list; icon; icon = icon->next)
+		if (icon->docked && icon->command && !icon->forced_dock &&
+		    launcherMatches(icon, instance, class))
+			return True;
+	return False;
+}
+
+Bool wDockAddLauncher(WScreen *scr, const char *instance, const char *wm_class,
+                      const char *command, const char *icon_file)
+{
+	WDock *clip;
+	WAppIcon *icon;
+	int x, y, i;
+
+    if (!scr || !command || !icon_file)
+		return False;
+
+    /* An empty field means that only the other half of WM_CLASS should be
+     * used for matching. This is needed for Electron applications whose
+     * instance name contains a profile path. */
+    if (instance && !*instance)
+		instance = NULL;
+    if (wm_class && !*wm_class)
+		wm_class = NULL;
+    if (!instance && !wm_class)
+		return False;
+
+	clip = scr->workspaces[scr->current_workspace]->clip;
+	if (!clip)
+		return False;
+
+	for (i = 1; i < clip->max_icons; i++) {
+		WAppIcon *existing = clip->icon_array[i];
+		Bool matches = False;
+
+		if (existing && instance && !wm_class)
+			matches = (existing->wm_instance &&
+				   strcasecmp(existing->wm_instance, instance) == 0) ||
+				  (existing->wm_class &&
+				   strcasecmp(existing->wm_class, instance) == 0);
+		else if (existing && wm_class && !instance)
+			matches = (existing->wm_class &&
+				   strcasecmp(existing->wm_class, wm_class) == 0) ||
+				  (existing->wm_instance &&
+				   strcasecmp(existing->wm_instance, wm_class) == 0);
+		else if (existing && instance && wm_class)
+			matches = existing->wm_instance && existing->wm_class &&
+				  strcasecmp(existing->wm_instance, instance) == 0 &&
+				  strcasecmp(existing->wm_class, wm_class) == 0;
+
+		if (matches) {
+			existing->forced_dock = 0;
+			return True;
+		}
+	}
+
+	if (!wDockFindFreeSlot(clip, &x, &y))
+		return False;
+	wDefaultChangeIcon(instance, wm_class, icon_file);
+	icon = wAppIconCreateForDock(scr, command, instance, wm_class, TILE_NORMAL);
+	/* Keep the launcher linked to the real application window so the icon
+	 * returns to its idle state when that window is closed. */
+	icon->forced_dock = 0;
+	icon->auto_launch = 0;
+
+	if (!wDockAttachIcon(clip, icon, x, y, True)) {
+		wAppIconDestroy(icon);
+		return False;
+	}
+
+	/* This is a placeholder appicon.  The dots indicate that the command
+	 * has not been started yet. */
+	icon->running = 0;
+	wClipMakeIconOmnipresent(icon, True);
+	wAppIconPaint(icon);
+	save_appicon(icon);
+	wDockShowIcons(clip);
+	XFlush(dpy);
 	return True;
 }
 
@@ -3294,29 +3395,14 @@ void wDockTrackWindowLaunch(WDock *dock, Window window)
 		if ((icon->wm_instance || icon->wm_class)
 		    && (icon->launching || !icon->running)) {
 
-			if (icon->wm_instance && wm_instance && strcmp(icon->wm_instance, wm_instance) != 0)
-				continue;
-
-			if (icon->wm_class && wm_class && strcmp(icon->wm_class, wm_class) != 0)
+			if (!launcherMatches(icon, wm_instance, wm_class))
 				continue;
 
 			if (firstPass && command && strcmp(icon->command, command) != 0)
 				continue;
 
-			if (!icon->relaunching) {
-				WApplication *wapp;
-
-				/* Possibly an application that was docked with dockit,
-				 * but the user did not update WMState to indicate that
-				 * it was docked by force */
-				wapp = wApplicationOf(window);
-				if (!wapp) {
-					icon->forced_dock = 1;
-					icon->running = 0;
-				}
-				if (!icon->forced_dock)
-					icon->main_window = window;
-			}
+			if (!icon->relaunching && !icon->forced_dock)
+				icon->main_window = window;
 			found = True;
 			if (!wPreferences.no_animations && !icon->launching &&
 			    !dock->screen_ptr->flags.startup && !dock->collapsed) {

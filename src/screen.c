@@ -1028,6 +1028,35 @@ void wScreenSaveState(WScreen * scr)
 	WMReleasePropList(old_state);
 }
 
+void wScreenSaveDockState(WScreen *scr)
+{
+	char *path;
+
+	if (!scr || wPreferences.flags.noupdates)
+		return;
+
+	/* Preserve the existing Applications and Workspace entries. */
+	if (!wPreferences.flags.nodock)
+		wDockSaveState(scr, NULL);
+	if (!wPreferences.flags.noclip)
+		wClipSaveState(scr);
+	wWorkspaceSaveState(scr, scr->session_state);
+	if (!wPreferences.flags.nodrawer)
+		wDrawersSaveState(scr);
+
+	if (w_global.screen_count == 1)
+		path = wdefaultspathfordomain("WMState");
+	else {
+		char buffer[16];
+		snprintf(buffer, sizeof(buffer), "WMState.%i", scr->screen);
+		path = wdefaultspathfordomain(buffer);
+	}
+
+	if (!WMWritePropListToFile(scr->session_state, path))
+		werror(_("could not save dock state in %s"), path);
+	wfree(path);
+}
+
 int wScreenBringInside(WScreen * scr, int *x, int *y, int width, int height)
 {
 	int moved = 0;
