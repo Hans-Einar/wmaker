@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     Display *d=XOpenDisplay(NULL); if(!d) return 1;
     Window root=DefaultRootWindow(d);
     Window leader=XCreateSimpleWindow(d,root,0,0,1,1,0,0,0);
-    Window windows[2];
+    Window windows[2], cover=None;
     XClassHint cls={"probe","Probe"};
     XSetClassHint(d,leader,&cls);
     for(int i=0;i<2;i++) {
@@ -49,6 +49,28 @@ int main(int argc, char **argv) {
     char cmd[40];
     while(fgets(cmd,sizeof(cmd),stdin)) {
         if(cmd[0]=='q') break;
+        if(cmd[0]=='b') {
+            cover=XCreateSimpleWindow(d,root,80,100,600,300,0,0,0x884444);
+            XClassHint c={"cover","Cover"};XSetClassHint(d,cover,&c);
+            XMapWindow(d,cover);XFlush(d);
+        }
+        if(cmd[0]=='t') {
+            Window frames[3]={windows[0],windows[1],cover};
+            for(int i=0;i<3;i++) {
+                Window r,p,*children;unsigned int n;
+                for(;;) {
+                    XQueryTree(d,frames[i],&r,&p,&children,&n);if(children) XFree(children);
+                    if(p==root) break;
+                    frames[i]=p;
+                }
+            }
+            Window r,p,*children;unsigned int n;int rank[3]={-1,-1,-1};
+            XQueryTree(d,root,&r,&p,&children,&n);
+            for(unsigned int j=0;j<n;j++) for(int i=0;i<3;i++)
+                if(children[j]==frames[i]) rank[i]=j;
+            XFree(children);
+            printf("%d\n",rank[0]>rank[2] && rank[1]>rank[2]);fflush(stdout);
+        }
         if(cmd[0]=='i') { XIconifyWindow(d,windows[0],DefaultScreen(d)); XFlush(d); }
         if(cmd[0]=='u') { XUnmapWindow(d,strtoul(cmd+1,NULL,10)); XFlush(d); }
         if(cmd[0]=='f') {
@@ -185,11 +207,16 @@ with tempfile.TemporaryDirectory(prefix='wmaker-hide-test-') as temp:
             click(.06);click();assert status()[::2]==hidden[::2],(case,'double click',status())
             click();assert status()[::2]==[1,1]
             if case=='clip':
+                command('b');time.sleep(.4)  # cover the app before leaving its workspace
                 command('w1');time.sleep(.4)
-                click()  # visible elsewhere: hide without jumping to that workspace
+                click()  # visible elsewhere: switch workspace and raise, without hiding
+                command('d');assert client.stdout.readline().strip()=='0'
+                assert status()[::2]==[1,1]
+                command('t');assert client.stdout.readline().strip()=='1','app not raised above cover'
+                click()  # already on the app workspace: hide
                 assert status()[::2]==[3,3]
-                command('d');assert client.stdout.readline().strip()=='1'
-                click()  # hidden: existing unhide returns to the app's workspace
+                command('w1');time.sleep(.4)
+                click()  # hidden: existing unhide returns to the app workspace
                 command('d');assert client.stdout.readline().strip()=='0'
                 assert status()[::2]==[1,1]
             x.XCloseDisplay(d)

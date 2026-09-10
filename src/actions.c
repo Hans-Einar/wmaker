@@ -1515,14 +1515,27 @@ Bool wHideApplicationForMinimize(WWindow *wwin)
 
 Bool wHideApplicationOnIconClick(WApplication *wapp, XEvent *event)
 {
+	WWindow *wwin;
+	WScreen *scr;
 	if (!wPreferences.appicon_toggles_hide || !wapp || wapp->flags.hidden ||
 	    event->xbutton.button != Button1 ||
 	    (event->xbutton.state & (ControlMask | ShiftMask | wPreferences.modifier_mask)) ||
 	    !wapp->app_icon || wapp->app_icon->launching ||
 	    (wapp->app_icon->icon->owner && wapp->app_icon->icon->owner->flags.is_dockapp))
 		return False;
-	wHideApplication(wapp);
-	return True;
+	/* A launcher on another workspace should use the normal workspace switch
+	 * and raise path. Hide only if this application is already visible here. */
+	scr = wapp->app_icon->icon->core->screen_ptr;
+	for (wwin = scr->focused_window; wwin; wwin = wwin->prev) {
+		if (wwin->main_window == wapp->main_window &&
+		    !wwin->flags.hidden && !wwin->flags.miniaturized &&
+		    (wwin->flags.mapped || wwin->flags.shaded) &&
+		    (wwin->frame->workspace == scr->current_workspace || IS_OMNIPRESENT(wwin))) {
+			wHideApplication(wapp);
+			return True;
+		}
+	}
+	return False;
 }
 
 void wIconifyWindow(WWindow *wwin)

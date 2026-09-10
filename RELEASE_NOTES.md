@@ -16,7 +16,9 @@ implemented changes on `master`; this is not a published release.
 - **App-icon hide/unhide:** optional `AppIconTogglesHide` makes ordinary activation
   hide running applications and restore hidden ones. Works with free, Dock and
   Clip appicons, preserves modifier actions and dockapp behavior, and avoids
-  double-click undo when single-click activation is enabled.
+  double-click undo when single-click activation is enabled. Apps visible only
+  on another workspace are first brought into view and raised; Hide applies
+  when the app already has a visible window on the current workspace.
 
 - **Live Clip launchers:** `wmappicon FILE.desktop` creates an omnipresent
   application icon without starting the application or leaving a helper running.

@@ -199,8 +199,10 @@ drawer launchers and follows `SingleClickLaunch`. In single-click mode, the
 second click of a double-click does not immediately undo the first toggle.
 Ctrl/Shift/modifier actions retain their existing meanings. Native dockapps and
 command buttons keep their own actions; startup icons are not hidden mid-launch.
-A visible app on another workspace is hidden without switching workspaces;
-activating its hidden icon returns to its last workspace as before.
+An app visible only on another workspace is activated by switching to its last
+workspace and raising its windows. Clicking again while its windows are visible
+on the current workspace hides it. Activating a hidden app returns to its last
+workspace as before.
 
 Validation: `python3 tests/application-hide.py` uses private Xvfb sessions and
 real X11 clients to check grouped/ungrouped applications, free/Dock/Clip icons,
