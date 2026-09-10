@@ -486,6 +486,8 @@ WDefaultEntry optionList[] = {
 	    &wPreferences.no_window_over_dock, getBool, updateUsableArea, NULL, NULL},
 	{"NoWindowOverIcons", "NO", NULL,
 	    &wPreferences.no_window_over_icons, getBool, updateUsableArea, NULL, NULL},
+	{"NoWindowOverClip", "NO", NULL,
+	    &wPreferences.no_window_over_clip, getBool, updateUsableArea, NULL, NULL},
 	{"WindowPlaceOrigin", "(64, 0)", NULL,
 	    &wPreferences.window_place_origin, getCoord, NULL, NULL, NULL},
 	{"ResizeDisplay", "center", seGeomDisplays,

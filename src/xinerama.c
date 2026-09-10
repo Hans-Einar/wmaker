@@ -28,6 +28,7 @@
 #include "framewin.h"
 #include "placement.h"
 #include "dock.h"
+#include "workspace.h"
 
 #ifdef USE_XINERAMA
 # ifdef SOLARIS_XINERAMA	/* sucks */
@@ -355,6 +356,79 @@ WMRect wGetRectForHead(WScreen * scr, int head)
 	return rect;
 }
 
+/* Keep the largest rectangle beside the visible Clip's bounding box. Read the
+ * live positions here, rather than caching them: dragging, collapsing and
+ * workspace changes must affect the next placement/maximization immediately.
+ */
+static WArea usableAreaWithoutClip(WScreen *scr, WArea area, WArea headArea)
+{
+	WDock *clip;
+	WArea bounds, candidates[4], best = area;
+	long long bestSize = 0;
+	int i, found = 0;
+	const int gap = 4;
+
+	if (wPreferences.flags.noclip || scr->current_workspace < 0 ||
+	    scr->current_workspace >= scr->workspace_count)
+		return area;
+	clip = scr->workspaces[scr->current_workspace]->clip;
+	if (!clip)
+		return area;
+
+	for (i = 0; i < clip->max_icons; i++) {
+		WAppIcon *icon = clip->icon_array[i];
+		WArea box;
+
+		/* The Clip tile remains visible when its application icons are hidden. */
+		if (!icon || (i > 0 && (clip->collapsed || !clip->mapped)))
+			continue;
+		box.x1 = icon->x_pos;
+		box.y1 = icon->y_pos;
+		box.x2 = box.x1 + wPreferences.icon_size;
+		box.y2 = box.y1 + wPreferences.icon_size;
+		if (box.x1 >= headArea.x2 || box.x2 <= headArea.x1 ||
+		    box.y1 >= headArea.y2 || box.y2 <= headArea.y1)
+			continue;
+		box.x1 = WMAX(box.x1 - gap, headArea.x1);
+		box.y1 = WMAX(box.y1 - gap, headArea.y1);
+		box.x2 = WMIN(box.x2 + gap, headArea.x2);
+		box.y2 = WMIN(box.y2 + gap, headArea.y2);
+		if (!found) {
+			bounds = box;
+			found = 1;
+		} else {
+			bounds.x1 = WMIN(bounds.x1, box.x1);
+			bounds.y1 = WMIN(bounds.y1, box.y1);
+			bounds.x2 = WMAX(bounds.x2, box.x2);
+			bounds.y2 = WMAX(bounds.y2, box.y2);
+		}
+	}
+	if (!found || bounds.x1 >= area.x2 || bounds.x2 <= area.x1 ||
+	    bounds.y1 >= area.y2 || bounds.y2 <= area.y1)
+		return area;
+
+	for (i = 0; i < 4; i++)
+		candidates[i] = area;
+	candidates[0].x1 = WMAX(area.x1, bounds.x2);
+	candidates[1].x2 = WMIN(area.x2, bounds.x1);
+	candidates[2].y1 = WMAX(area.y1, bounds.y2);
+	candidates[3].y2 = WMIN(area.y2, bounds.y1);
+	for (i = 0; i < 4; i++) {
+		WArea candidate = candidates[i];
+		long long size;
+
+		if (candidate.x2 <= candidate.x1 || candidate.y2 <= candidate.y1)
+			continue;
+		size = (long long)(candidate.x2 - candidate.x1) * (candidate.y2 - candidate.y1);
+		if (size > bestSize) {
+			best = candidate;
+			bestSize = size;
+		}
+	}
+	/* A Clip spread across the entire head must not produce an empty area. */
+	return best;
+}
+
 WArea wGetUsableAreaForHead(WScreen * scr, int head, WArea * totalAreaPtr, Bool noicons)
 {
 	WArea totalArea, usableArea;
@@ -395,6 +469,9 @@ WArea wGetUsableAreaForHead(WScreen * scr, int head, WArea * totalAreaPtr, Bool 
 				usableArea.x1 += offset;
 		}
 	}
+
+	if (noicons && wPreferences.no_window_over_clip)
+		usableArea = usableAreaWithoutClip(scr, usableArea, totalArea);
 
 	return usableArea;
 }

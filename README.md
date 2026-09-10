@@ -91,3 +91,35 @@ session.
 Ctrl plus Window Maker's configured modifier (typically Alt) and left-drag
 resizes a window. The existing modifier+middle-drag resize gesture remains
 available.
+
+## Reserve space for Clip icons
+
+Enable the optional `NoWindowOverClip` preference (default: `NO`):
+
+```sh
+wdwrite WindowMaker NoWindowOverClip YES
+```
+
+After installing this build, restart Window Maker from its menu once. Subsequent
+preference changes are read live. Maximize a window again to use the new area.
+
+The window placement/maximization area excludes the bounding box of the current
+workspace's visible Clip icons, with a four-pixel gap. The largest remaining
+rectangle on one side is chosen: a column along the left edge reserves a left
+strip, and a row along the top reserves a top strip. The calculation uses live
+icon positions, includes omnipresent icons, and ignores application icons hidden
+by a collapsed Clip (the Clip tile itself still reserves space). Only icons
+intersecting the requested monitor contribute to its reserved area.
+
+Existing Dock, icon-yard and workspace-border reservations remain in effect.
+Already maximized windows are not automatically resized when icons move. Explicit
+`FullMaximize` window attributes and fullscreen windows retain their existing
+behavior. If icons span the whole monitor and leave no nonempty rectangle, the
+original usable area is retained. Arbitrary scattered layouts can reserve more
+space than a compact row or column.
+
+Validation: `python3 tests/clip-maximize.py` starts isolated Xvfb servers and tests
+actual window maximization with this option on/off, all four edges, a collapsed
+Clip, workspace switching, omnipresent icons, `FullMaximize`, and disabled Clip.
+Requires a built source tree, Python 3, Xvfb, a C compiler and Xlib development
+files. It does not access the running desktop or personal configuration.

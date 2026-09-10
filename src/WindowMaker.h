@@ -339,6 +339,7 @@ extern struct WPreferences {
 	char use_saveunders;               /* turn on SaveUnders for menus, icons etc. */
 	char no_window_over_dock;
 	char no_window_over_icons;
+	char no_window_over_clip;
 	WCoord window_place_origin;        /* Offset for windows placed on screen */
 
 	char constrain_window_size;        /* don't let windows get bigger than screen */
