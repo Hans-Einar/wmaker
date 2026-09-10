@@ -7,6 +7,14 @@ implemented changes on `master`; this is not a published release.
 
 ### Added
 
+- **Three-finger touchpad control:** optional `TouchpadGestures` interface and
+  `wmtouchpad` controller bring the Gesture Lab motion model to the running WM.
+  Horizontal swipes switch existing workspaces; vertical swipes shade/unshade
+  the window active at gesture start. Axis locking and partial finger-lift
+  pause/resume preserve completed actions. Defaults: 15 mm, C=0.5, 5 mm lock,
+  max 10 existing workspaces, no wrap, discrete switching. The feature defaults
+  off and the reader uses existing sudo access without changing input permissions.
+
 - **Minimize to Hide:** optional `MinimizeHidesApplication` hides the application
   group instead of creating separate miniature icons when its appicon is visible.
   Iconless clients retain ordinary single-window miniaturization and restoration;

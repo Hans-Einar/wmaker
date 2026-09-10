@@ -492,6 +492,8 @@ WDefaultEntry optionList[] = {
 	    &wPreferences.minimize_hides_application, getBool, NULL, NULL, NULL},
 	{"AppIconTogglesHide", "NO", NULL,
 	    &wPreferences.appicon_toggles_hide, getBool, NULL, NULL, NULL},
+	{"TouchpadGestures", "NO", NULL,
+	    &wPreferences.touchpad_gestures, getBool, NULL, NULL, NULL},
 	{"WindowPlaceOrigin", "(64, 0)", NULL,
 	    &wPreferences.window_place_origin, getCoord, NULL, NULL, NULL},
 	{"ResizeDisplay", "center", seGeomDisplays,

@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+"""Run Window Maker's optional three-finger touchpad controller."""
+import os
+from pathlib import Path
+import runpy
+import sys
+here=Path(__file__).resolve().parent
+for directory in (here/'touchpad',here.parent/'share'/'WindowMaker'/'touchpad'):
+    if (directory/'controller.py').exists():
+        sys.path.insert(0,str(directory))
+        runpy.run_path(str(directory/'controller.py'),run_name='__main__')
+        break
+else:
+    sys.exit('wmtouchpad: controller files not installed')

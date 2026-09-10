@@ -1067,10 +1067,58 @@ out:
 		XFree(data);
 }
 
+/* Versioned request/reply interface for the optional raw-touchpad controller.
+ * All actions stay in the WM, respecting live preferences and window state.
+ * data: version, operation (0=query, 1=workspace, 2=shade), value, target, serial.
+ * Reply property: version, enabled, workspace, count, focused XID, shaded, serial.
+ */
+static void handleTouchpadCommand(XClientMessageEvent *event)
+{
+	WScreen *scr = wScreenForRootWindow(DefaultRootWindow(dpy));
+	WWindow *target;
+	unsigned long reply[7];
+	long operation = event->data.l[1], value = event->data.l[2];
+	Bool enabled;
+
+	if (!scr || event->format != 32 || event->data.l[0] != 1)
+		return;
+	enabled = wPreferences.touchpad_gestures && !WCHECK_STATE(WSTATE_MODAL);
+	if (enabled && operation == 1 && value >= 0 && value < scr->workspace_count) {
+		if (scr->current_workspace != value)
+			wWorkspaceChange(scr, (int)value);
+	} else if (enabled && operation == 2 && (value == 0 || value == 1)) {
+		target = wWindowFor((Window)event->data.l[3]);
+		if (target && target->screen_ptr == scr && !WFLAGP(target, no_shadeable) &&
+		    !target->flags.miniaturized && !target->flags.hidden && !target->flags.fullscreen &&
+		    (target->flags.mapped || target->flags.shaded) &&
+		    (target->frame->workspace == scr->current_workspace || IS_OMNIPRESENT(target))) {
+			if (value && !target->flags.shaded)
+				wShadeWindow(target);
+			else if (!value && target->flags.shaded)
+				wUnshadeWindow(target);
+		}
+	}
+	target = scr->focused_window;
+	reply[0] = 1;
+	reply[1] = enabled;
+	reply[2] = scr->current_workspace;
+	reply[3] = scr->workspace_count;
+	reply[4] = target ? target->client_win : None;
+	reply[5] = target ? target->flags.shaded : 0;
+	reply[6] = event->data.l[4];
+	XChangeProperty(dpy, event->window, XInternAtom(dpy, "_WINDOWMAKER_TOUCHPAD_REPLY", False),
+	                XA_CARDINAL, 32, PropModeReplace, (unsigned char *)reply, 7);
+}
+
 static void handleClientMessage(XEvent * event)
 {
 	WWindow *wwin;
 	WObjDescriptor *desc;
+
+	if (event->xclient.message_type == XInternAtom(dpy, "_WINDOWMAKER_TOUCHPAD", False)) {
+		handleTouchpadCommand(&event->xclient);
+		return;
+	}
 
 	/* handle transition from Normal to Iconic state */
 	if (event->xclient.message_type == w_global.atom.wm.change_state

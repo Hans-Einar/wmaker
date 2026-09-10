@@ -7,9 +7,9 @@ pkgdatadir  = $(datadir)/@PACKAGE@
 bin_PROGRAMS = wmappicon-ipc wxcopy wxpaste wdwrite wdread getstyle setstyle convertfonts \
 	seticons geticonset wmsetbg wmagnify wmgenmenu wmmenugen wmiv
 
-bin_SCRIPTS = wmappicon wmaker.inst wm-oldmenu2new wkdemenu.pl
+bin_SCRIPTS = wmtouchpad wmappicon wmaker.inst wm-oldmenu2new wkdemenu.pl
 
-EXTRA_DIST = wmappicon wmaker.inst.in bughint wm-oldmenu2new wkdemenu.pl
+EXTRA_DIST = wmtouchpad wmappicon wmaker.inst.in bughint wm-oldmenu2new wkdemenu.pl
 
 AM_CPPFLAGS = \
 	 $(DFLAGS) -I$(top_srcdir)/WINGs -I$(top_builddir)/wrlib \
@@ -93,3 +93,8 @@ wmaker.inst: $(srcdir)/wmaker.inst.in ./Makefile
 
 wmappicon_ipc_SOURCES = wmappicon-ipc.c
 wmappicon_ipc_LDADD = @XLFLAGS@ @XLIBS@
+
+# Pure Python controller and shared raw-contact engine; no GTK dependency.
+touchpaddir = $(pkgdatadir)/touchpad
+touchpad_DATA = touchpad/engine.py touchpad/reader.py touchpad/controller.py touchpad/x11.py
+EXTRA_DIST += $(touchpad_DATA)

@@ -203,3 +203,62 @@ real X11 clients to check grouped/ungrouped applications, free/Dock/Clip icons,
 workspace switching, hide/unhide, double-click handling, absence of extra
 miniature icons, disabled preferences and explicit opt-outs. Requires a built
 source tree, Xvfb, a C compiler, libX11 development files and libXtst.
+
+
+## Three-finger touchpad control (experimental)
+
+This fork includes `wmtouchpad`, a small GTK-free controller, and an optional
+native WM action interface. It reads physical touchpad contacts, locks the first
+clear axis, and uses Window Maker's own workspace and shade/unshade actions.
+
+```sh
+wdwrite WindowMaker TouchpadGestures YES
+# Restart Window Maker from its menu after installing the new binary.
+wmtouchpad --check
+wmtouchpad
+```
+
+The preference defaults to NO. `wdwrite WindowMaker TouchpadGestures NO` rejects
+subsequent actions without uninstalling anything. Stop the controller with
+Ctrl+C (or `systemctl --user stop wmtouchpad` when running as a user service).
+The service is not enabled for automatic login by the build/install process.
+
+Defaults follow Gesture Lab: 15 mm per workspace width, C=0.5, 5 mm axis-lock
+threshold, 40 mm curtain height, maximum 10 workspaces, wrap off, axis locking
+on, discrete workspace jumps. `wmtouchpad --help` lists tuning flags. Workspace
+count is capped by the actual existing count, so no new workspaces are created.
+The >50% threshold triggers a workspace change; reversing at a hard end responds
+immediately. Only three-contact motion advances the gesture. One/two/four-plus
+contacts pause it. Three contacts resume with distance and axis intact; confirmed
+zero contacts ends the sequence. No previously selected workspace is undone on
+release. The current prototype recognizes motion from raw contact positions;
+GTK is not required globally and application gesture events are not intercepted.
+
+Horizontal displacement uses `effective += dx * max(1, abs(dx) * C)`, in physical
+millimeters per input frame. This intentionally retains the lab's per-frame
+acceleration model. Vertical motion up shades (rolls up to titlebar), down
+unshades. A half-curtain threshold (20 mm by default) selects the shade state.
+The target is the focused window captured when three contacts first appear;
+changing focus midway never redirects the vertical action to another window.
+Hidden, minimized, fullscreen, unshadeable or destroyed targets are ignored by
+the native handler. There is no partial live resizing of the window: the WM
+performs its existing shade/unshade animation at the threshold.
+
+The main controller runs as the user. A reader opens only a detected touchpad
+with `sudo -n`, drops privileges, and supplies positions; it never grabs the
+device, logs keyboard input, or changes device permissions. Existing sudo access
+is required, as in the lab. No sudoers/input-group changes are installed.
+Only one controller per display can run. It waits for a supporting WM with the
+preference enabled before opening the reader. `--dry-run` logs decisions without
+performing actions; `--replay FILE` accepts synthetic frames for isolated tests.
+
+Implementation: `util/touchpad/engine.py` is the lab's pure motion/preview model;
+`controller.py` adapts it to live windows, and `x11.py` provides versioned
+request/reply IPC. Native validation and actions are in `src/event.c`. Each
+request carries its own reply window and serial, avoiding shared root-property
+payload races. The WM rechecks the opt-in preference and target state per action.
+
+Validation: `python3 tests/touchpad.py` runs real fork binaries in private Xvfb
+sessions with synthetic contact frames. It covers disabled preference, workspace
+limits/wrap, pause/resume, one/two-finger exclusion, shade/unshade, target changes,
+and destroyed targets. It never opens the real input device.
