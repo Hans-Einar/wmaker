@@ -1484,6 +1484,19 @@ static int getAnimationGeometry(WWindow *wwin, int *ix, int *iy, int *iw, int *i
 }
 #endif	/* USE_ANIMATIONS */
 
+static Bool applicationHasVisibleIcon(WApplication *wapp)
+{
+	XWindowAttributes attr;
+
+	if (!wapp || !wapp->main_window_desc || !wapp->app_icon || !wapp->app_icon->icon ||
+	    !wapp->app_icon->icon->core || WFLAGP(wapp->main_window_desc, no_appicon))
+		return False;
+	/* WApplication can own an internal icon that was never painted (or is
+	 * inside a collapsed Clip). Its existence is not a way to restore an app. */
+	return XGetWindowAttributes(dpy, wapp->app_icon->icon->core->window, &attr)
+	       && attr.map_state == IsViewable;
+}
+
 Bool wHideApplicationForMinimize(WWindow *wwin)
 {
 	WApplication *wapp;
@@ -1493,7 +1506,7 @@ Bool wHideApplicationForMinimize(WWindow *wwin)
 	wapp = wApplicationOf(wwin->main_window);
 	/* Keep the normal minimization fallback if there is no usable app icon
 	 * from which the user can restore the application. */
-	if (!wapp || !wapp->app_icon || WFLAGP(wapp->main_window_desc, no_appicon))
+	if (!applicationHasVisibleIcon(wapp))
 		return False;
 	if (!wapp->flags.hidden)
 		wHideApplication(wapp);
@@ -1942,6 +1955,16 @@ void wHideApplication(WApplication *wapp)
 		return;
 	}
 	scr = wapp->main_window_desc->screen_ptr;
+	if (wPreferences.minimize_hides_application && !applicationHasVisibleIcon(wapp)) {
+		/* Explicit Hide requests must not strand an iconless application.
+		 * Miniaturize the active window, leaving the rest of its group alone. */
+		wlist = scr->focused_window;
+		if (wlist && wlist->main_window == wapp->main_window &&
+		    wlist->flags.mapped && !wlist->flags.hidden &&
+		    !WFLAGP(wlist, no_miniaturizable))
+			wIconifyWindow(wlist);
+		return;
+	}
 	hadfocus = 0;
 	wlist = scr->focused_window;
 	if (!wlist)

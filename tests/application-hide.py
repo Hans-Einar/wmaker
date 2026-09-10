@@ -5,6 +5,7 @@ from ctypes.util import find_library
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -12,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CLIENT = r'''
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/keysym.h>
+#include <X11/extensions/XTest.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -47,6 +50,18 @@ int main(int argc, char **argv) {
     while(fgets(cmd,sizeof(cmd),stdin)) {
         if(cmd[0]=='q') break;
         if(cmd[0]=='i') { XIconifyWindow(d,windows[0],DefaultScreen(d)); XFlush(d); }
+        if(cmd[0]=='u') { XUnmapWindow(d,strtoul(cmd+1,NULL,10)); XFlush(d); }
+        if(cmd[0]=='f') {
+            XEvent e={0};e.xclient.type=ClientMessage;e.xclient.window=windows[0];
+            e.xclient.message_type=XInternAtom(d,"_NET_ACTIVE_WINDOW",False);
+            e.xclient.format=32;e.xclient.data.l[0]=2;
+            XSendEvent(d,root,False,SubstructureRedirectMask|SubstructureNotifyMask,&e);XFlush(d);
+        }
+        if(cmd[0]=='h') {
+            KeyCode alt=XKeysymToKeycode(d,XK_Alt_L), h=XKeysymToKeycode(d,XK_h);
+            XTestFakeKeyEvent(d,alt,True,0);XTestFakeKeyEvent(d,h,True,0);
+            XTestFakeKeyEvent(d,h,False,0);XTestFakeKeyEvent(d,alt,False,0);XFlush(d);
+        }
         if(cmd[0]=='w') {
             XEvent e={0};e.xclient.type=ClientMessage;e.xclient.window=root;
             e.xclient.message_type=XInternAtom(d,"_NET_CURRENT_DESKTOP",False);
@@ -79,8 +94,8 @@ int main(int argc, char **argv) {
 with tempfile.TemporaryDirectory(prefix='wmaker-hide-test-') as temp:
     temp=Path(temp)
     (temp/'client.c').write_text(CLIENT)
-    subprocess.run(['cc',str(temp/'client.c'),'-lX11','-o',str(temp/'client')],check=True)
-    for case in ['legacy','application','clip','dock','ungrouped','no-appicon','no-emulation']:
+    subprocess.run(['cc',str(temp/'client.c'),'-lX11','-lXtst','-o',str(temp/'client')],check=True)
+    for case in sys.argv[1:] or ['legacy','application','clip','dock','ungrouped','no-appicon','no-emulation','hide-key','mini-key','unmapped-icon']:
         rd,wr=os.pipe()
         xv=subprocess.Popen(['Xvfb','-displayfd',str(wr),'-screen','0','800x600x24','-nolisten','tcp'],
                             pass_fds=(wr,),stderr=subprocess.DEVNULL)
@@ -90,7 +105,8 @@ with tempfile.TemporaryDirectory(prefix='wmaker-hide-test-') as temp:
         defaults=profile/'Defaults'; defaults.mkdir(parents=True)
         enabled='NO' if case=='legacy' else 'YES'
         (defaults/'WindowMaker').write_text('{MinimizeHidesApplication='+enabled+'; AppIconTogglesHide='+enabled+
-            '; SingleClickLaunch=YES; SaveSessionOnExit=NO; DisableAnimations=YES; DoubleClickTime=250;}')
+            '; SingleClickLaunch=YES; SaveSessionOnExit=NO; DisableAnimations=YES; DoubleClickTime=250;'+
+            ('HideKey=None; MiniaturizeKey="Mod1+h";' if case=='mini-key' else 'HideKey="Mod1+h";')+'}')
         if case=='no-emulation':
             (defaults/'WMWindowAttributes').write_text('{Probe={EmulateAppIcon=No;};}')
         if case=='no-appicon':
@@ -119,23 +135,27 @@ with tempfile.TemporaryDirectory(prefix='wmaker-hide-test-') as temp:
                 command('s');return list(map(int,client.stdout.readline().split()))
             def icons():
                 command('k');return [tuple(map(int,item.split(','))) for item in client.stdout.readline().split()]
+            if case=='unmapped-icon':
+                appicon=sorted((x,i) for i,x,y in icons() if y>400)[0][1]
+                command('u'+str(appicon));time.sleep(.2)
             before = icons()
             assert status()[::2]==[1,1]
-            command('i');time.sleep(.5)
+            command('f');time.sleep(.3)
+            command('i' if case in ('legacy','application','clip','dock') else 'h');time.sleep(.5)
             hidden=status()
-            if case in ('legacy','no-appicon','no-emulation'):
+            if case in ('legacy','ungrouped','no-appicon','no-emulation','unmapped-icon'):
                 assert hidden[::2]==[3,1],(case,hidden)
             else:
                 assert hidden[::2]==[3,3] and hidden[1]==hidden[3],(case,hidden)
-            if case in ('legacy','no-appicon','no-emulation'):
-                print('PASS',case,'retains ordinary minimization',flush=True)
-                continue
-            assert len(icons())==len(before),(case,'extra miniature icon',before,icons())
+            if case in ('legacy','ungrouped','no-appicon','no-emulation','unmapped-icon'):
+                icon=next(i for i,x,y in icons() if i not in {item[0] for item in before})
+            if case not in ('legacy','ungrouped','no-appicon','no-emulation','unmapped-icon'):
+                assert len(icons())==len(before),(case,'extra miniature icon',before,icons())
             if case=='clip':
                 icon=next(i for i,x,y in before if x==0 and y==64)
             elif case=='dock':
                 icon=next(i for i,x,y in before if x==736 and y==64)
-            else:
+            elif case not in ('legacy','ungrouped','no-appicon','no-emulation','unmapped-icon'):
                 icon=sorted((x,i) for i,x,y in before if y>400)[0][1]
             x=C.CDLL(find_library('X11'));xt=C.CDLL(find_library('Xtst'))
             x.XOpenDisplay.argtypes=[C.c_char_p];x.XOpenDisplay.restype=C.c_void_p
@@ -152,6 +172,12 @@ with tempfile.TemporaryDirectory(prefix='wmaker-hide-test-') as temp:
                 xt.XTestFakeMotionEvent(d,-1,px.value,py.value,0)
                 xt.XTestFakeButtonEvent(d,1,1,0);xt.XTestFakeButtonEvent(d,1,0,0)
                 x.XFlush(d);time.sleep(delay)
+            if case in ('legacy','ungrouped','no-appicon','no-emulation','unmapped-icon'):
+                click(.06);click()
+                assert status()[::2]==[1,1],(case,'restore miniature',status())
+                x.XCloseDisplay(d)
+                print('PASS',case,'miniaturizes one window and restores from miniature',flush=True)
+                continue
             click();assert status()[::2]==[1,1],(case,'unhide',status())
             click();assert status()[::2]==hidden[::2],(case,'hide',status())
             click();assert status()[::2]==[1,1]

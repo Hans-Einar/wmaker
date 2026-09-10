@@ -853,14 +853,12 @@ WWindow *wManageWindow(WScreen *scr, Window window)
 	wWindowSetupInitialAttributes(wwin, &window_level, &workspace);
 
 	/* Modern clients may omit both group hints and WM_CLIENT_LEADER.
-	 * A matching launcher, or application-wide minimization, needs a
-	 * WApplication. Use the existing emulation/grouping machinery and
-	 * respect explicit per-window preferences. */
+	 * A matching launcher needs a WApplication. Respect explicit per-window
+	 * preferences; miniaturization alone must not create new app icons. */
 	if (wwin->main_window == None && !WFLAGP(wwin, no_appicon) &&
 	    !wwin->defined_user_flags.emulate_appicon &&
 	    (wwin->transient_for == None || wwin->transient_for == scr->root_win) &&
-	    (wPreferences.minimize_hides_application ||
-	     wDockHasLauncher(scr, wwin->wm_instance, wwin->wm_class))) {
+	    wDockHasLauncher(scr, wwin->wm_instance, wwin->wm_class)) {
 		wwin->user_flags.emulate_appicon = 1;
 		wwin->defined_user_flags.emulate_appicon = 1;
 	}

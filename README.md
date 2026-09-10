@@ -178,10 +178,19 @@ Hide Application: all windows in the application group are hidden without adding
 individual miniature icons. This covers the titlebar minimize button and the
 normal window-menu, shortcut and client minimization path.
 
-Applications without a group use Window Maker's existing application-icon
-emulation when this preference is enabled as they are managed. Explicit
-`NoAppIcon` and `EmulateAppIcon` rules are respected. If no usable application icon
-exists, normal minimization remains available so the window is recoverable.
+Hide is used only when the application has a viewable application icon. Without
+one (including an unmapped icon or a collapsed Clip), only the active window is
+miniaturized and can be restored from its miniature icon. Enabling this preference
+does not manufacture application icons for ungrouped clients. Existing launcher
+matching and explicit `NoAppIcon` / `EmulateAppIcon` rules remain in effect.
+The Hide shortcut also uses this safe fallback when the preference is enabled.
+Upstream defaults bind Hide to Alt+H and Miniaturize to Alt+M; to bind Miniaturize
+to Alt+H explicitly, use:
+
+```sh
+wdwrite WindowMaker HideKey None
+wdwrite WindowMaker MiniaturizeKey 'Mod1+h'
+```
 
 `AppIconTogglesHide` makes plain left activation of an existing application icon
 hide a visible application. Activating a hidden application retains the existing

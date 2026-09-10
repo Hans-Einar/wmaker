@@ -8,8 +8,11 @@ implemented changes on `master`; this is not a published release.
 ### Added
 
 - **Minimize to Hide:** optional `MinimizeHidesApplication` hides the application
-  group instead of creating separate miniature icons. Applications without group
-  hints use the existing icon emulation, respecting explicit window rules.
+  group instead of creating separate miniature icons when its appicon is visible.
+  Iconless clients retain ordinary single-window miniaturization and restoration;
+  enabling this setting does not create appicons for ungrouped clients. The Hide
+  shortcut (normally Alt+H) also falls back safely, and the Miniaturize shortcut
+  handles clients with the GNUstep miniaturization protocol consistently.
 - **App-icon hide/unhide:** optional `AppIconTogglesHide` makes ordinary activation
   hide running applications and restore hidden ones. Works with free, Dock and
   Clip appicons, preserves modifier actions and dockapp behavior, and avoids

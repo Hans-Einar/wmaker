@@ -1617,6 +1617,8 @@ static void dispatchWKBDCommand(int command, WScreen *scr, WWindow *wwin, XEvent
 		    && !WFLAGP(wwin, no_miniaturizable)) {
 			CloseWindowMenu(scr);
 
+			if (wHideApplicationForMinimize(wwin))
+				break;
 			if (wwin->protocols.MINIATURIZE_WINDOW)
 				wClientSendProtocol(wwin, w_global.atom.gnustep.wm_miniaturize_window, event->xbutton.time);
 			else {
@@ -1628,6 +1630,11 @@ static void dispatchWKBDCommand(int command, WScreen *scr, WWindow *wwin, XEvent
 		if (ISMAPPED(wwin) && ISFOCUSED(wwin)) {
 			WApplication *wapp = wApplicationOf(wwin->main_window);
 			CloseWindowMenu(scr);
+			if (wPreferences.minimize_hides_application) {
+				if (!wHideApplicationForMinimize(wwin) && !WFLAGP(wwin, no_miniaturizable))
+					wIconifyWindow(wwin);
+				break;
+			}
 
 			if (wapp && !WFLAGP(wapp->main_window_desc, no_appicon)) {
 				wHideApplication(wapp);
