@@ -1,6 +1,6 @@
 # Window Maker: personal enhancements
 
-This fork adds live desktop-file launchers and Ctrl+modifier left-drag resizing
+This fork adds live desktop-file launchers and application-icon improvements
 on top of Window Maker. The original project documentation is in [README](README)
 and [INSTALL](INSTALL).
 
@@ -126,12 +126,6 @@ startup shading cleared with a valid application owner, activation from another
 workspace, closing the application, omnipresent movement, state saving and restored
 icon identities. The user also confirmed the corrected behavior in the desktop
 session.
-
-## Ctrl+modifier left-drag resizing
-
-Ctrl plus Window Maker's configured modifier (typically Alt) and left-drag
-resizes a window. The existing modifier+middle-drag resize gesture remains
-available.
 
 ## Reserve space for Clip icons
 

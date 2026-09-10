@@ -33,12 +33,13 @@ implemented changes on `master`; this is not a published release.
   visible Clip icons, including omnipresent icons, with a four-pixel gap. The
   calculation follows their current positions and collapsed state. This option
   defaults to `NO`.
-- **Alternative resize gesture:** Ctrl plus the configured Window Maker modifier
-  (usually Alt) and left-drag resizes a window.
 - **Command-line help:** `wmappicon --help` / `-h` documents launcher creation,
   command buttons and saving.
 
 ### Fixed
+
+- Removed the experimental Ctrl+modifier left-drag resize override. Standard
+  modifier+right-drag resizing remains available.
 
 - Clip launchers can bind to applications such as Chrome and ChatGPT that lack
   an application leader, using Window Maker's application-icon emulation.
