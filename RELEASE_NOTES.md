@@ -7,6 +7,14 @@ implemented changes on `master`; this is not a published release.
 
 ### Added
 
+- **Minimize to Hide:** optional `MinimizeHidesApplication` hides the application
+  group instead of creating separate miniature icons. Applications without group
+  hints use the existing icon emulation, respecting explicit window rules.
+- **App-icon hide/unhide:** optional `AppIconTogglesHide` makes ordinary activation
+  hide running applications and restore hidden ones. Works with free, Dock and
+  Clip appicons, preserves modifier actions and dockapp behavior, and avoids
+  double-click undo when single-click activation is enabled.
+
 - **Live Clip launchers:** `wmappicon FILE.desktop` creates an omnipresent
   application icon without starting the application or leaving a helper running.
   Icons appear immediately in the current workspace.
@@ -55,6 +63,11 @@ implemented changes on `master`; this is not a published release.
   supported. See [README.md](README.md) for details.
 
 ### Validation
+
+- `python3 tests/application-hide.py` checks minimize-to-hide, no extra miniature
+  icons, icon hide/unhide, workspace switching, double-click handling,
+  grouped and ungrouped clients, Dock/Clip/free icons and explicit opt-outs in
+  isolated Xvfb sessions.
 
 - Built successfully; launcher behavior was tested with Chrome and ChatGPT in
   isolated Xvfb sessions and confirmed in the desktop session.

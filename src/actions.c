@@ -1484,6 +1484,34 @@ static int getAnimationGeometry(WWindow *wwin, int *ix, int *iy, int *iw, int *i
 }
 #endif	/* USE_ANIMATIONS */
 
+Bool wHideApplicationForMinimize(WWindow *wwin)
+{
+	WApplication *wapp;
+
+	if (!wPreferences.minimize_hides_application)
+		return False;
+	wapp = wApplicationOf(wwin->main_window);
+	/* Keep the normal minimization fallback if there is no usable app icon
+	 * from which the user can restore the application. */
+	if (!wapp || !wapp->app_icon || WFLAGP(wapp->main_window_desc, no_appicon))
+		return False;
+	if (!wapp->flags.hidden)
+		wHideApplication(wapp);
+	return True;
+}
+
+Bool wHideApplicationOnIconClick(WApplication *wapp, XEvent *event)
+{
+	if (!wPreferences.appicon_toggles_hide || !wapp || wapp->flags.hidden ||
+	    event->xbutton.button != Button1 ||
+	    (event->xbutton.state & (ControlMask | ShiftMask | wPreferences.modifier_mask)) ||
+	    !wapp->app_icon || wapp->app_icon->launching ||
+	    (wapp->app_icon->icon->owner && wapp->app_icon->icon->owner->flags.is_dockapp))
+		return False;
+	wHideApplication(wapp);
+	return True;
+}
+
 void wIconifyWindow(WWindow *wwin)
 {
 	XWindowAttributes attribs;
@@ -1491,6 +1519,8 @@ void wIconifyWindow(WWindow *wwin)
 
 	if (!XGetWindowAttributes(dpy, wwin->client_win, &attribs))
 		return; /* the window doesn't exist anymore */
+	if (wHideApplicationForMinimize(wwin))
+		return;
 
 	if (wwin->flags.miniaturized)
 		return; /* already miniaturized */

@@ -3785,6 +3785,8 @@ static void iconDblClick(WObjDescriptor *desc, XEvent *event)
 		wapp = wApplicationOf(btn->icon->owner->main_window);
 
 		assert(wapp != NULL);
+		if (wHideApplicationOnIconClick(wapp, event))
+			return;
 
 		unhideHere = (event->xbutton.state & ShiftMask);
 
@@ -4138,6 +4140,11 @@ static void iconMouseDown(WObjDescriptor *desc, XEvent *event)
 		wMenuUnmap(dock->menu);
 
 	if (IsDoubleClick(scr, event)) {
+		if (wPreferences.appicon_toggles_hide && wPreferences.single_click &&
+		    aicon->icon->owner && !aicon->icon->owner->flags.is_dockapp && !aicon->launching &&
+		    event->xbutton.button == Button1 &&
+		    !(event->xbutton.state & (ControlMask | ShiftMask | MOD_MASK)))
+			return;
 		/* double-click was not in the main clip icon */
 		if (dock->type != WM_CLIP || aicon->xindex != 0 || aicon->yindex != 0
 		    || getClipButton(event->xbutton.x, event->xbutton.y) == CLIP_IDLE) {

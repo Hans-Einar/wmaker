@@ -51,6 +51,8 @@ void wShadeWindow(WWindow *wwin);
 void wUnshadeWindow(WWindow *wwin);
 
 void wIconifyWindow(WWindow *wwin);
+Bool wHideApplicationForMinimize(WWindow *wwin);
+Bool wHideApplicationOnIconClick(WApplication *wapp, XEvent *event);
 void wDeiconifyWindow(WWindow *wwin);
 
 void wSelectWindows(WScreen *scr, XEvent *ev);
@@ -89,4 +91,3 @@ void movePointerToWindowCenter(WWindow *wwin);
 void moveBetweenHeads(WWindow *wwin, int direction);
 
 #endif
-

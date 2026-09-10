@@ -340,6 +340,8 @@ extern struct WPreferences {
 	char no_window_over_dock;
 	char no_window_over_icons;
 	char no_window_over_clip;
+	char minimize_hides_application;
+	char appicon_toggles_hide;
 	WCoord window_place_origin;        /* Offset for windows placed on screen */
 
 	char constrain_window_size;        /* don't let windows get bigger than screen */

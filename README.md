@@ -164,3 +164,37 @@ actual window maximization with this option on/off, all four edges, a collapsed
 Clip, workspace switching, omnipresent icons, `FullMaximize`, and disabled Clip.
 Requires a built source tree, Python 3, Xvfb, a C compiler and Xlib development
 files. It does not access the running desktop or personal configuration.
+
+## Minimize to Hide and app-icon toggling
+
+```sh
+wdwrite WindowMaker MinimizeHidesApplication YES
+wdwrite WindowMaker AppIconTogglesHide YES
+```
+
+Both preferences default to `NO`. Install the new build and restart Window Maker
+from its menu once. `MinimizeHidesApplication` sends normal minimization through
+Hide Application: all windows in the application group are hidden without adding
+individual miniature icons. This covers the titlebar minimize button and the
+normal window-menu, shortcut and client minimization path.
+
+Applications without a group use Window Maker's existing application-icon
+emulation when this preference is enabled as they are managed. Explicit
+`NoAppIcon` and `EmulateAppIcon` rules are respected. If no usable application icon
+exists, normal minimization remains available so the window is recoverable.
+
+`AppIconTogglesHide` makes plain left activation of an existing application icon
+hide a visible application. Activating a hidden application retains the existing
+unhide/workspace behavior. It applies to free application icons, Dock, Clip and
+drawer launchers and follows `SingleClickLaunch`. In single-click mode, the
+second click of a double-click does not immediately undo the first toggle.
+Ctrl/Shift/modifier actions retain their existing meanings. Native dockapps and
+command buttons keep their own actions; startup icons are not hidden mid-launch.
+A visible app on another workspace is hidden without switching workspaces;
+activating its hidden icon returns to its last workspace as before.
+
+Validation: `python3 tests/application-hide.py` uses private Xvfb sessions and
+real X11 clients to check grouped/ungrouped applications, free/Dock/Clip icons,
+workspace switching, hide/unhide, double-click handling, absence of extra
+miniature icons, disabled preferences and explicit opt-outs. Requires a built
+source tree, Xvfb, a C compiler, libX11 development files and libXtst.

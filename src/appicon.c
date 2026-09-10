@@ -679,6 +679,8 @@ static void iconDblClick(WObjDescriptor *desc, XEvent *event)
 	}
 
 	unhideHere = (event->xbutton.state & ShiftMask);
+	if (wHideApplicationOnIconClick(wapp, event))
+		return;
 	/* go to the last workspace that the user worked on the app */
 	if (!unhideHere && wapp->last_workspace != scr->current_workspace)
 		wWorkspaceChange(scr, wapp->last_workspace);
@@ -699,6 +701,11 @@ void appIconMouseDown(WObjDescriptor * desc, XEvent * event)
 		return;
 
 	if (IsDoubleClick(scr, event)) {
+		if (wPreferences.appicon_toggles_hide && wPreferences.single_click &&
+		    aicon->icon->owner && !aicon->icon->owner->flags.is_dockapp && !aicon->launching &&
+		    event->xbutton.button == Button1 &&
+		    !(event->xbutton.state & (ControlMask | ShiftMask | MOD_MASK)))
+			return;
 		/* Middle or right mouse actions were handled on first click */
 		if (event->xbutton.button == Button1)
 			iconDblClick(desc, event);
@@ -739,7 +746,8 @@ void appIconMouseDown(WObjDescriptor * desc, XEvent * event)
 	}
 
 	hasMoved = wHandleAppIconMove(aicon, event);
-	if (wPreferences.single_click && !hasMoved && aicon->dock != NULL)
+	if (wPreferences.single_click && !hasMoved &&
+	    (aicon->dock != NULL || wPreferences.appicon_toggles_hide))
 	{
 		iconDblClick(desc, event);
 	}
