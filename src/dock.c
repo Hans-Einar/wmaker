@@ -2298,7 +2298,7 @@ Bool wDockHasLauncher(WScreen *scr, const char *instance, const char *class)
 }
 
 Bool wDockAddLauncher(WScreen *scr, const char *instance, const char *wm_class,
-                      const char *command, const char *icon_file)
+                      const char *command, const char *icon_file, Bool command_only)
 {
 	WDock *clip;
 	WAppIcon *icon;
@@ -2341,7 +2341,16 @@ Bool wDockAddLauncher(WScreen *scr, const char *instance, const char *wm_class,
 				  strcasecmp(existing->wm_class, wm_class) == 0;
 
 		if (matches) {
-			existing->forced_dock = 0;
+			existing->forced_dock = command_only;
+			existing->buggy_app = command_only;
+			if (command_only) {
+				wfree(existing->command);
+				existing->command = wstrdup(command);
+				wfree(existing->paste_command);
+				existing->paste_command = wstrdup(command);
+				existing->running = 0;
+				wDockFinishLaunch(existing);
+			}
 			return True;
 		}
 	}
@@ -2352,12 +2361,18 @@ Bool wDockAddLauncher(WScreen *scr, const char *instance, const char *wm_class,
 	icon = wAppIconCreateForDock(scr, command, instance, wm_class, TILE_NORMAL);
 	/* Keep the launcher linked to the real application window so the icon
 	 * returns to its idle state when that window is closed. */
-	icon->forced_dock = 0;
+	icon->forced_dock = command_only;
+	icon->buggy_app = command_only;
 	icon->auto_launch = 0;
 
 	if (!wDockAttachIcon(clip, icon, x, y, True)) {
 		wAppIconDestroy(icon);
 		return False;
+	}
+
+	if (command_only) {
+		wfree(icon->paste_command);
+		icon->paste_command = wstrdup(command);
 	}
 
 	/* This is a placeholder appicon.  The dots indicate that the command

@@ -1058,7 +1058,8 @@ static void handleDockLauncherCommand(void)
 	{
 		WScreen *scr = wScreenForRootWindow(DefaultRootWindow(dpy));
 		if (scr)
-			wDockAddLauncher(scr, fields[1], fields[2], fields[3], fields[4]);
+			wDockAddLauncher(scr, fields[1], fields[2], fields[3], fields[4],
+			                 cursor && strcmp(cursor, "command") == 0);
 	}
 
 out:

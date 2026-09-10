@@ -77,7 +77,7 @@ void wDockSaveState(WScreen *scr, WMPropList *old_state);
 Bool wDockAttachIcon(WDock *dock, WAppIcon *icon, int x, int y, Bool update_icon);
 Bool wDockHasLauncher(WScreen *scr, const char *instance, const char *class);
 Bool wDockAddLauncher(WScreen *scr, const char *instance, const char *wm_class,
-                      const char *command, const char *icon_file);
+                      const char *command, const char *icon_file, Bool command_only);
 Bool wDockSnapIcon(WDock *dock, WAppIcon *icon, int req_x, int req_y,
                    int *ret_x, int *ret_y, int redocking);
 Bool wDockFindFreeSlot(WDock *dock, int *req_x, int *req_y);

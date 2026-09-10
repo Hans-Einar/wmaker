@@ -4,6 +4,26 @@ This fork adds live desktop-file launchers and Ctrl+modifier left-drag resizing
 on top of Window Maker. The original project documentation is in [README](README)
 and [INSTALL](INSTALL).
 
+The running list of implemented fork changes is in
+[release notes: WIP / Unreleased](RELEASE_NOTES.md). Update it in the same commit
+as each user-visible change. At release time, give the section a version and date
+and start a fresh WIP section.
+
+Git can provide a commit summary for review, for example:
+
+```sh
+git log --reverse --format='- %s (%h)' b5bd9a19..HEAD
+```
+
+Here `b5bd9a19` is this fork's upstream starting point; use the previous release
+tag for later releases. Review that summary against the WIP notes. GitHub's
+[generated release notes](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes)
+summarize merged pull requests, contributors and a comparison link. Since this
+fork also uses direct commits, keep the maintained WIP notes as the user-facing
+feature summary. A future release can use a prepared notes file with
+`gh release create TAG --repo Hans-Einar/wmaker --verify-tag --draft --notes-file FILE`;
+replace `TAG` and `FILE` with the release's existing tag and prepared notes.
+
 ## wmappicon
 
 Create a native application icon in the current Clip from a `.desktop` file:
@@ -23,6 +43,27 @@ workspace icon layout to `WMState`, preserving the existing application-session
 entries. It does not capture currently open terminal windows. Previously saved
 application-session entries are not removed; `SaveSessionOnExit = NO` prevents
 normal exits from capturing a new application session.
+
+### Command buttons (toggle actions)
+
+For a persistent service such as CopyQ, create a command button:
+
+```sh
+wmappicon --command 'copyq --start-server toggle' --name copyq-toggle --icon copyq
+wmappicon -s
+```
+
+Each activation runs the command, even when CopyQ is already running. The icon
+uses a separate `WMCommandButton` identity and is saved with `Forced = Yes` and
+`BuggyApplication = Yes`. It does not bind to the application's window or wait
+for a new window to appear. Activation follows Window Maker's single/double-click
+preference. Reusing `--name` updates the command on the existing button in the
+current Clip. `--icon` accepts an absolute filename or an icon name.
+
+Commands use Window Maker's normal argument parsing, not a shell. Do not append
+`&`; use an explicit `sh -c` command if shell operators are required.
+The optional sixth launcher IPC field is `command` for this mode. Existing
+five-field requests retain ordinary application-launcher behavior.
 
 ### Window Maker changes
 
