@@ -49,6 +49,7 @@
 #include <WINGs/WINGs.h>
 
 #include "WindowMaker.h"
+#include "dockpreview.h"
 #include "GNUstep.h"
 #include "wcore.h"
 #include "framewin.h"
@@ -185,6 +186,10 @@ void wWindowDestroy(WWindow *wwin)
 		wwin->screen_ptr->cmap_window = NULL;
 
 	WMRemoveNotificationObserver(wwin);
+	if (wwin->dock_preview) {
+		RReleaseImage(wwin->dock_preview);
+		wwin->dock_preview = NULL;
+	}
 
 	wwin->flags.destroyed = 1;
 
@@ -1805,6 +1810,7 @@ void wWindowMap(WWindow *wwin)
 
 void wWindowUnmap(WWindow *wwin)
 {
+	wDockPreviewCapture(wwin);
 	wwin->flags.mapped = 0;
 
 	/* prevent window withdrawal when getting UnmapNotify */
@@ -2125,6 +2131,7 @@ void wWindowChangeWorkspace(WWindow *wwin, int workspace)
 	if (workspace >= scr->workspace_count || workspace < 0 || workspace == wwin->frame->workspace)
 		return;
 
+	wDockPreviewCapture(wwin);
 	if (workspace != scr->current_workspace) {
 		/* Sent to other workspace. Unmap window */
 		if ((wwin->flags.mapped

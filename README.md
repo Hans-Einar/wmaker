@@ -4,6 +4,25 @@ This fork adds live desktop-file launchers and application-icon improvements
 on top of Window Maker. The original project documentation is in [README](README)
 and [INSTALL](INSTALL).
 
+## Development checkout
+
+Use `~/git/Linux/subrepos/wmaker` on this workstation, tracking
+`Hans-Einar/wmaker` branch `master`. This is the combined source for the Clip
+launchers, application hiding, touchpad gestures, and window preview drawers.
+The old `~/src/wmaker` path is an alias to this checkout; make, commit, and push
+changes here so the features stay together.
+
+## Dock window previews
+
+Hover a Dock, Clip, or persistent-drawer launcher for 700 ms to show window
+thumbnails. Left-click opens the drawer immediately when multiple windows are
+available; this takes precedence over `AppIconTogglesHide` for those launchers.
+Single-window activation retains the hide/show behavior. Hover temporarily
+raises a window, including minimized windows. Other-workspace tiles are gray;
+hovering them for 700 ms previews their workspace without reordering the tiles.
+Escape or an outside click cancels workspace browsing, while selecting a tile
+commits it. See [drawer behavior and tests](doc/dock-window-drawer.md).
+
 The running list of implemented fork changes is in
 [release notes: WIP / Unreleased](RELEASE_NOTES.md). Update it in the same commit
 as each user-visible change. At release time, give the section a version and date
@@ -222,6 +241,21 @@ The preference defaults to NO. `wdwrite WindowMaker TouchpadGestures NO` rejects
 subsequent actions without uninstalling anything. Stop the controller with
 Ctrl+C (or `systemctl --user stop wmtouchpad` when running as a user service).
 The service is not enabled for automatic login by the build/install process.
+If you run the controller as a user service, start it from
+`~/GNUstep/Library/WindowMaker/autostart` after importing the X11 environment.
+Starting the service manually only lasts for the current login. For an existing
+`~/.config/systemd/user/wmtouchpad.service`, the session hook is:
+
+```sh
+export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
+systemctl --user import-environment DISPLAY XAUTHORITY
+systemctl --user reset-failed wmtouchpad.service 2>/dev/null || :
+systemctl --user restart --no-block wmtouchpad.service
+```
+
+Let the service inherit `DISPLAY` and `XAUTHORITY` rather than hardcoding them.
+The controller waits for the WM interface to become ready, and `--no-block`
+keeps Window Maker's startup script from waiting on the controller.
 
 Defaults follow Gesture Lab: 15 mm per workspace width, C=0.5, 5 mm axis-lock
 threshold, 40 mm curtain height, maximum 10 workspaces, wrap off, axis locking

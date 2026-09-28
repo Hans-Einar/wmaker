@@ -22,6 +22,7 @@ POTFILES  = \
 	$(top_srcdir)/src/defaults.c \
 	$(top_srcdir)/src/dialog.c \
 	$(top_srcdir)/src/dock.c \
+	$(top_srcdir)/src/dockpreview.c \
 	$(top_srcdir)/src/dockedapp.c \
 	$(top_srcdir)/src/event.c \
 	$(top_srcdir)/src/framewin.c \

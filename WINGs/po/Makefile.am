@@ -122,4 +122,5 @@ am__v_CHKTRANS_1 =
 # 'make check' will make sure the tranlation sources are in line with the compiled source
 check-local:
 	$(AM_V_CHKTRANS)$(top_srcdir)/script/check-translation-sources.sh \
-		"$(srcdir)" -s "$(top_srcdir)/WINGs/Makefile.am"
+		"$(srcdir)" -s "$(top_srcdir)/WINGs/Makefile.am" \
+		-v libWINGs_la_SOURCES -v libWUtil_la_SOURCES

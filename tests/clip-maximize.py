@@ -103,6 +103,10 @@ with tempfile.TemporaryDirectory(prefix="wmaker-clip-test-") as tmp:
             profile = tmp / name
             defaults = profile / "Defaults"
             defaults.mkdir(parents=True)
+            startup = profile / 'Library/WindowMaker/autostart'
+            startup.parent.mkdir(parents=True)
+            startup.write_text('#!/bin/sh\nexit 0\n')
+            startup.chmod(0o755)
             if name == "full-maximize":
                 (defaults / "WMWindowAttributes").write_text('{ "*" = { FullMaximize = YES; }; }')
             (defaults / "WindowMaker").write_text(

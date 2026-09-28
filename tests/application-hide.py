@@ -125,9 +125,13 @@ with tempfile.TemporaryDirectory(prefix='wmaker-hide-test-') as temp:
         with os.fdopen(rd) as pipe: display=':'+pipe.readline().strip()
         profile=temp/case
         defaults=profile/'Defaults'; defaults.mkdir(parents=True)
+        startup = profile / 'Library/WindowMaker/autostart'
+        startup.parent.mkdir(parents=True)
+        startup.write_text('#!/bin/sh\nexit 0\n')
+        startup.chmod(0o755)
         enabled='NO' if case=='legacy' else 'YES'
         (defaults/'WindowMaker').write_text('{MinimizeHidesApplication='+enabled+'; AppIconTogglesHide='+enabled+
-            '; SingleClickLaunch=YES; SaveSessionOnExit=NO; DisableAnimations=YES; DoubleClickTime=250;'+
+            '; DockWindowDrawer=NO; SingleClickLaunch=YES; SaveSessionOnExit=NO; DisableAnimations=YES; DoubleClickTime=250;'+
             ('HideKey=None; MiniaturizeKey="Mod1+h";' if case=='mini-key' else 'HideKey="Mod1+h";')+'}')
         if case=='no-emulation':
             (defaults/'WMWindowAttributes').write_text('{Probe={EmulateAppIcon=No;};}')

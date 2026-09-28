@@ -7,6 +7,15 @@ implemented changes on `master`; this is not a published release.
 
 ### Added
 
+- **Window preview drawers:** 700 ms hover or a plain left-click on a multiwindow
+  launcher opens workspace-grouped snapshots. Hover temporarily raises windows
+  and reveals minimized windows. Other-workspace tiles are grayscale; sustained
+  hover previews their workspace without changing tile order. Escape/outside
+  click returns to the original workspace; selecting a tile commits it.
+  Multiwindow drawers take precedence over app-icon hide toggling.
+- **Safe nested timers:** callbacks remain alive when workspace switching
+  processes events recursively, fixing crashes during workspace preview.
+
 - **Three-finger touchpad control:** optional `TouchpadGestures` interface and
   `wmtouchpad` controller bring the Gesture Lab motion model to the running WM.
   Horizontal swipes switch existing workspaces; vertical swipes shade/unshade

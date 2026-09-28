@@ -41,6 +41,10 @@ with tempfile.TemporaryDirectory(prefix='wmaker-touchpad-test-') as tmp:
         os.close(wr)
         with os.fdopen(rd) as stream:display=':'+stream.readline().strip()
         profile=tmp/str(enabled);defaults=profile/'Defaults';defaults.mkdir(parents=True)
+        startup = profile / 'Library/WindowMaker/autostart'
+        startup.parent.mkdir(parents=True)
+        startup.write_text('#!/bin/sh\nexit 0\n')
+        startup.chmod(0o755)
         (defaults/'WindowMaker').write_text('{TouchpadGestures='+('YES' if enabled else 'NO')+';SaveSessionOnExit=NO;DisableAnimations=YES;}')
         (defaults/'WMState').write_text('{Workspaces=('+','.join('{Name=W'+str(i)+';}' for i in range(10))+');Applications=();}')
         log=(profile/'wm.log').open('w+')
@@ -48,7 +52,11 @@ with tempfile.TemporaryDirectory(prefix='wmaker-touchpad-test-') as tmp:
         connection=None
         old_display=os.environ.get('DISPLAY');os.environ['DISPLAY']=display
         try:
-            time.sleep(.7);connection=Connection();state=connection.request()
+            connection=Connection();state=None
+            deadline=time.monotonic()+8
+            while state is None and time.monotonic()<deadline:
+                assert wm.poll() is None, 'Window Maker exited during startup'
+                state=connection.request()
             assert state and state[1]==enabled and state[3]==10,state
             if not enabled:
                 state=connection.request(1,5);assert state[2]==0

@@ -38,6 +38,7 @@
 #endif
 
 #include "WindowMaker.h"
+#include "dockpreview.h"
 #include "wcore.h"
 #include "window.h"
 #include "icon.h"
@@ -2522,6 +2523,8 @@ void wDockDetach(WDock *dock, WAppIcon *icon)
 	int index;
 	Bool update_icon = False;
 
+	wDockPreviewHide(dock->screen_ptr);
+
 	/* make the settings panel be closed */
 	if (icon->panel)
 		DestroyDockAppSettingsPanel(icon->panel);
@@ -4130,6 +4133,7 @@ static void iconMouseDown(WObjDescriptor *desc, XEvent *event)
 	WAppIcon *aicon = desc->parent;
 	WDock *dock = aicon->dock;
 	WScreen *scr = aicon->icon->core->screen_ptr;
+	Bool previewClick;
 
 	if (aicon->editing || WCHECK_STATE(WSTATE_MODAL))
 		return;
@@ -4139,7 +4143,10 @@ static void iconMouseDown(WObjDescriptor *desc, XEvent *event)
 	if (dock->menu->flags.mapped)
 		wMenuUnmap(dock->menu);
 
-	if (IsDoubleClick(scr, event)) {
+	previewClick = event->xbutton.button == Button1 &&
+		!(event->xbutton.state & (ShiftMask | ControlMask | Mod1Mask | Mod3Mask | Mod4Mask | Mod5Mask | MOD_MASK)) &&
+		wDockPreviewHasMultiple(aicon);
+	if (IsDoubleClick(scr, event) && !previewClick) {
 		if (wPreferences.appicon_toggles_hide && wPreferences.single_click &&
 		    aicon->icon->owner && !aicon->icon->owner->flags.is_dockapp && !aicon->launching &&
 		    event->xbutton.button == Button1 &&
@@ -4172,7 +4179,9 @@ static void iconMouseDown(WObjDescriptor *desc, XEvent *event)
 				handleDockMove(dock, aicon, event);
 		} else {
 			Bool hasMoved = wHandleAppIconMove(aicon, event);
-			if (wPreferences.single_click && !hasMoved)
+			if (!hasMoved && previewClick)
+				wDockPreviewClick(aicon);
+			else if (wPreferences.single_click && !hasMoved)
 				iconDblClick(desc, event);
 		}
 	} else if (event->xbutton.button == Button2 && aicon == scr->clip_icon) {
@@ -4241,6 +4250,9 @@ static void clipEnterNotify(WObjDescriptor *desc, XEvent *event)
 
 	if (dock == NULL)
 		return;
+
+	if (event->xcrossing.mode == NotifyNormal)
+		wDockPreviewEnter(btn);
 
 	/* The auto raise/lower code */
 	tmp = (dock->type == WM_DRAWER ? scr->dock : dock);
@@ -4319,6 +4331,7 @@ static void clipLeaveNotify(WObjDescriptor *desc, XEvent *event)
 	if (desc->parent_type != WCLASS_DOCK_ICON)
 		return;
 
+	wDockPreviewLeave(btn);
 	clipLeave(btn->dock);
 }
 
@@ -4329,6 +4342,11 @@ static void clipAutoCollapse(void *cdata)
 	if (dock->type != WM_CLIP && dock->type != WM_DRAWER)
 		return;
 
+	if (dock->auto_collapse && wDockPreviewKeepsDockOpen(dock)) {
+		dock->auto_collapse_magic = WMAddTimerHandler(WMAX(100, wPreferences.clip_auto_collapse_delay),
+							    clipAutoCollapse, dock);
+		return;
+	}
 	if (dock->auto_collapse) {
 		dock->collapsed = 1;
 		wDockHideIcons(dock);
@@ -4354,6 +4372,11 @@ static void clipAutoLower(void *cdata)
 {
 	WDock *dock = (WDock *) cdata;
 
+	if (dock->auto_raise_lower && wDockPreviewKeepsDockOpen(dock)) {
+		dock->auto_lower_magic = WMAddTimerHandler(WMAX(100, wPreferences.clip_auto_lower_delay),
+							 clipAutoLower, dock);
+		return;
+	}
 	if (dock->auto_raise_lower)
 		wDockLower(dock);
 

@@ -284,6 +284,7 @@ typedef struct WWindow {
 
 		unsigned int destroyed:1;	/* window was already destroyed */
 		unsigned int menu_open_for_me:1;/* window commands menu */
+		unsigned int preview_unobscured:1; /* safe non-composited snapshot */
 		unsigned int obscured:1;	/* window is obscured */
 
 		unsigned int net_skip_pager:1;
@@ -296,6 +297,7 @@ typedef struct WWindow {
 						 * else is NULL! */
 	int icon_x, icon_y;			/* position of the icon */
 	int icon_w, icon_h;
+	RImage *dock_preview;             /* last snapshot before leaving the workspace */
 	RImage *net_icon_image;			/* Window Image */
 	Atom type;
 	char *mark_key_label;		/* Vim-like Window Marking */

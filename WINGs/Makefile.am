@@ -14,6 +14,12 @@ libWUtil_la_LDFLAGS = -version-info @WUTIL_VERSION@
 
 lib_LTLIBRARIES = libWUtil.la libWINGs.la
 
+check_PROGRAMS = timer_test
+TESTS = timer_test
+timer_test_SOURCES = timer_test.c
+timer_test_CPPFLAGS = -I$(top_srcdir)/WINGs
+timer_test_LDADD = libWUtil.la
+
 
 LDADD= libWUtil.la libWINGs.la $(top_builddir)/wrlib/libwraster.la @INTLIBS@
 libWINGs_la_LIBADD = libWUtil.la $(top_builddir)/wrlib/libwraster.la @XLIBS@ @XFT_LIBS@ @FCLIBS@ @LIBM@ @PANGO_LIBS@

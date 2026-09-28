@@ -51,6 +51,7 @@
 #include <X11/XKBlib.h>
 
 #include "WindowMaker.h"
+#include "dockpreview.h"
 #include "window.h"
 #include "actions.h"
 #include "client.h"
@@ -853,6 +854,8 @@ static void handleButtonPress(XEvent * event)
 	WScreen *scr;
 
 	scr = wScreenForRootWindow(event->xbutton.root);
+	if (!wDockPreviewIsWindow(scr, event->xbutton.window))
+		wDockPreviewHide(scr);
 
 #ifdef BALLOON_TEXT
 	wBalloonHide(scr);
@@ -2169,6 +2172,11 @@ static void handleKeyPress(XEvent * event)
 	WKeyAction *act;
 	int modifiers;
 
+	if (wDockPreviewHandleKey(scr, &event->xkey))
+		return;
+	/* Cancellation can switch workspaces and dispatch client events. */
+	wwin = scr->focused_window;
+
 	/* ignore CapsLock */
 	modifiers = event->xkey.state & w_global.shortcut.modifiers_mask;
 
@@ -2519,6 +2527,7 @@ static void handleVisibilityNotify(XEvent * event)
 	if (!wwin)
 		return;
 	wwin->flags.obscured = (event->xvisibility.state == VisibilityFullyObscured);
+	wwin->flags.preview_unobscured = (event->xvisibility.state == VisibilityUnobscured);
 }
 
 static void handle_selection_request(XSelectionRequestEvent *event)

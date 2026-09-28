@@ -35,6 +35,7 @@
 #include <sys/time.h>
 
 #include "WindowMaker.h"
+#include "dockpreview.h"
 #include "framewin.h"
 #include "window.h"
 #include "icon.h"
@@ -487,6 +488,15 @@ void wWorkspaceForceChange(WScreen * scr, int workspace)
 	if (workspace > scr->workspace_count - 1)
 		wWorkspaceMake(scr, workspace - scr->workspace_count + 1);
 
+	if (!wDockPreviewSwitchingWorkspace(scr))
+		wDockPreviewHide(scr);
+	/* Capture before mapping the destination workspace over these windows. */
+	if (workspace != scr->current_workspace) {
+		for (tmp = scr->focused_window; tmp; tmp = tmp->prev) {
+			if (!IS_OMNIPRESENT(tmp))
+				wDockPreviewCapture(tmp);
+		}
+	}
 	wClipUpdateForWorkspaceChange(scr, workspace);
 
 	scr->last_workspace = scr->current_workspace;
@@ -514,7 +524,7 @@ void wWorkspaceForceChange(WScreen * scr, int workspace)
 		 * but will create annoyance for every other application
 		 */
 		while (tmp) {
-			if (tmp->frame->workspace != workspace && !tmp->flags.selected) {
+			if (tmp->frame->workspace != workspace && (!tmp->flags.selected || wDockPreviewSwitchingWorkspace(scr))) {
 				/* unmap windows not on this workspace */
 				if ((tmp->flags.mapped || tmp->flags.shaded) &&
 				    !IS_OMNIPRESENT(tmp) && !tmp->flags.changing_workspace) {
@@ -546,7 +556,7 @@ void wWorkspaceForceChange(WScreen * scr, int workspace)
 				}
 			} else {
 				/* change selected windows' workspace */
-				if (tmp->flags.selected) {
+				if (tmp->flags.selected && !wDockPreviewSwitchingWorkspace(scr)) {
 					wWindowChangeWorkspace(tmp, workspace);
 					if (!tmp->flags.miniaturized && !foc) {
 						foc = tmp;

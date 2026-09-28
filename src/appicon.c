@@ -31,6 +31,7 @@
 #include <errno.h>
 
 #include "WindowMaker.h"
+#include "dockpreview.h"
 #include "window.h"
 #include "icon.h"
 #include "application.h"
@@ -335,6 +336,7 @@ void wAppIconDestroy(WAppIcon * aicon)
 {
 	WScreen *scr = aicon->icon->core->screen_ptr;
 
+	wDockPreviewHide(scr);
 	RemoveFromStackList(aicon->icon->core);
 	wIconDestroy(aicon->icon);
 	if (aicon->command)
@@ -374,6 +376,8 @@ static void drawCorner(WIcon * icon)
 
 void wAppIconMove(WAppIcon * aicon, int x, int y)
 {
+	if (!wDockPreviewSwitchingWorkspace(aicon->icon->core->screen_ptr))
+		wDockPreviewHide(aicon->icon->core->screen_ptr);
 	XMoveWindow(dpy, aicon->icon->core->window, x, y);
 	aicon->x_pos = x;
 	aicon->y_pos = y;
