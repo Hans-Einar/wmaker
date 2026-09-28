@@ -140,3 +140,10 @@ WPrefs.app/WPrefs.desktop
 *~
 
 .pc
+
+# Generated timer regression test and Automake test runner
+/test-driver
+/WINGs/timer_test
+/WINGs/*.trs
+/WINGs/test-suite.log
+/WINGs/timer_test.log

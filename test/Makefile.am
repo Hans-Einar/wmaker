@@ -2,7 +2,7 @@
 
 AUTOMAKE_OPTIONS = no-dependencies
 
-EXTRA_DIST = notest.c
+EXTRA_DIST = notest.c dockpreview_test.c dockpreview-xvfb.sh
 
 noinst_PROGRAMS = wtest wm_fsm_test
 

@@ -31,6 +31,7 @@
 #include <time.h>
 
 #include "WindowMaker.h"
+#include "dockpreview.h"
 #include "framewin.h"
 #include "window.h"
 #include "client.h"
@@ -339,6 +340,7 @@ void wShadeWindow(WWindow *wwin)
 	if (wwin->flags.shaded)
 		return;
 
+	wDockPreviewCapture(wwin);
 	XLowerWindow(dpy, wwin->client_win);
 	shade_animate(wwin, SHADE);
 

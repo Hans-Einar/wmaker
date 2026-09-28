@@ -40,6 +40,7 @@
 #include "WindowMaker.h"
 #include "def_pixmaps.h"
 #include "screen.h"
+#include "dockpreview.h"
 #include "texture.h"
 #include "pixmap.h"
 #include "menu.h"
@@ -1386,6 +1387,7 @@ void ScreenCapture(WScreen *scr, int mode)
 
 void wScreenDestroy(WScreen *scr)
 {
+	wDockPreviewHide(scr);
 #ifdef USE_RANDR
 	wRandRTeardown(scr);
 #else

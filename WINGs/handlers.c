@@ -27,6 +27,7 @@ typedef struct TimerHandler {
 	void *clientData;
 	struct TimerHandler *next;
 	int nextDelay;		/* 0 if it's one-shot */
+	Bool running;		/* callback is on the stack of an event loop */
 } TimerHandler;
 
 typedef struct IdleHandler {
@@ -135,6 +136,7 @@ WMHandlerID WMAddTimerHandler(int milliseconds, WMCallback * callback, void *cda
 	handler->callback = callback;
 	handler->clientData = cdata;
 	handler->nextDelay = 0;
+	handler->running = False;
 
 	enqueueTimerHandler(handler);
 
@@ -301,6 +303,7 @@ Bool W_CheckIdleHandlers(void)
 void W_CheckTimerHandlers(void)
 {
 	TimerHandler *handler;
+	TimerHandler **link;
 	struct timeval now;
 
 	if (!timerHandler) {
@@ -314,14 +317,25 @@ void W_CheckTimerHandlers(void)
 	while (handler && IS_AFTER(now, handler->when)) {
 		if (!IS_ZERO(handler->when)) {
 			SET_ZERO(handler->when);
+			handler->running = True;
 			(*handler->callback) (handler->clientData);
+			handler->running = False;
 		}
 		handler = handler->next;
 	}
 
-	while (timerHandler && IS_ZERO(timerHandler->when)) {
-		handler = timerHandler;
-		timerHandler = timerHandler->next;
+	/* A callback can enter another event loop (for example, while changing
+	 * workspace). Keep every active handler linked and alive until its own
+	 * callback returns. Nested dispatch may reclaim completed neighbours,
+	 * updating these links, but must not free or reschedule an active timer.
+	 * Scan past active handlers so other persistent timers can still run. */
+	link = &timerHandler;
+	while ((handler = *link) && IS_ZERO(handler->when)) {
+		if (handler->running) {
+			link = &handler->next;
+			continue;
+		}
+		*link = handler->next;
 
 		if (handler->nextDelay > 0) {
 			handler->when = now;

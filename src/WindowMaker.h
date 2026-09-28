@@ -430,6 +430,7 @@ extern struct WPreferences {
 	char window_balloon;
 	char miniwin_title_balloon;
 	char miniwin_preview_balloon;
+	char dock_window_drawer;           /* hover dock icons to preview their windows */
 	char appicon_balloon;
 	char help_balloon;
 

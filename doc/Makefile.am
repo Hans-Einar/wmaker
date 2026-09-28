@@ -25,7 +25,7 @@ man_MANS = \
 
 MOSTLYCLEANFILES = wmaker.1 wmsetbg.1
 
-EXTRA_DIST = wmaker.in wmsetbg.in
+EXTRA_DIST = wmaker.in wmsetbg.in dock-window-drawer.md
 
 
 ################################################################################

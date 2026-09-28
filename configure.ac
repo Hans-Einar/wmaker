@@ -666,6 +666,18 @@ m4_divert_pop([INIT_PREPARE])dnl
 WM_XEXT_CHECK_XRANDR
 
 
+dnl Optional compositor-backed snapshots for dock window drawers.
+wm_save_LIBS="$LIBS"
+AC_CHECK_HEADERS([X11/extensions/Xcomposite.h], [
+    AC_CHECK_LIB([Xcomposite], [XCompositeNameWindowPixmap], [
+        AC_DEFINE([HAVE_XCOMPOSITE], [1], [Define if X Composite snapshot support is available])
+        LIBXCOMPOSITE="-lXcomposite"
+    ], [], [$XLFLAGS $XLIBS])
+], [], [[#include <X11/Xlib.h>]])
+LIBS="$wm_save_LIBS"
+AC_SUBST([LIBXCOMPOSITE])
+
+
 dnl Math library
 dnl ============
 dnl libWINGS uses math functions, check whether usage requires linking

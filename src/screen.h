@@ -294,6 +294,8 @@ typedef struct _WScreen {
     WMHandlerID *workspace_name_timer;
     struct WorkspaceNameData *workspace_name_data;
 
+    struct WDockPreview *dock_preview; /* temporary dock window drawer */
+
     /* mini screenshot data */
     Window mini_screenshot;
     time_t mini_screenshot_timeout;

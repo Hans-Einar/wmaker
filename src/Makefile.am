@@ -31,6 +31,8 @@ wmaker_SOURCES = 	\
 	dialog.c \
 	dialog.h \
 	dock.c \
+	dockpreview.c \
+	dockpreview.h \
 	dockedapp.c \
 	dockedapp.h \
 	dock.h \
@@ -166,6 +168,7 @@ wmaker_LDADD = \
 	$(top_builddir)/wrlib/libwraster.la\
 	@XLFLAGS@ \
 	@LIBXRANDR@ \
+	@LIBXCOMPOSITE@ \
 	@LIBXINERAMA@ \
 	@LIBXKBFILE@ \
 	@XLIBS@ \
