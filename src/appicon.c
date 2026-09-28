@@ -336,7 +336,7 @@ void wAppIconDestroy(WAppIcon * aicon)
 {
 	WScreen *scr = aicon->icon->core->screen_ptr;
 
-	wDockPreviewHide(scr);
+	wDockPreviewHideForIcon(aicon);
 	RemoveFromStackList(aicon->icon->core);
 	wIconDestroy(aicon->icon);
 	if (aicon->command)
@@ -377,7 +377,7 @@ static void drawCorner(WIcon * icon)
 void wAppIconMove(WAppIcon * aicon, int x, int y)
 {
 	if (!wDockPreviewSwitchingWorkspace(aicon->icon->core->screen_ptr))
-		wDockPreviewHide(aicon->icon->core->screen_ptr);
+		wDockPreviewHideForIcon(aicon);
 	XMoveWindow(dpy, aicon->icon->core->window, x, y);
 	aicon->x_pos = x;
 	aicon->y_pos = y;

@@ -2451,6 +2451,8 @@ static void hotCornerDelay(void *data)
 
 static void handleMotionNotify(XEvent *event)
 {
+	if (wDockPreviewHandleMotion(wScreenForRootWindow(event->xmotion.root), &event->xmotion))
+		return;
 	if (wPreferences.scrollable_menus || wPreferences.hot_corners) {
 		WScreen *scr = wScreenForRootWindow(event->xmotion.root);
 		WMPoint p = wmkpoint(event->xmotion.x_root, event->xmotion.y_root);

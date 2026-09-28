@@ -510,6 +510,8 @@ WDefaultEntry optionList[] = {
 	    &wPreferences.miniwin_preview_balloon, getBool, NULL, NULL, NULL},
 	{"DockWindowDrawer", "YES", NULL,
 	    &wPreferences.dock_window_drawer, getBool, NULL, NULL, NULL},
+	{"DockWindowDrawerExplosion", "NO", NULL,
+	    &wPreferences.dock_window_drawer_explosion, getBool, NULL, NULL, NULL},
 	{"AppIconBalloons", "NO", NULL,
 	    &wPreferences.appicon_balloon, getBool, NULL, NULL, NULL},
 	{"HelpBalloons", "NO", NULL,

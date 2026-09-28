@@ -7,6 +7,12 @@ implemented changes on `master`; this is not a published release.
 
 ### Added
 
+- **Close windows from previews:** an immediate hover close button sends the
+  normal application close request. Closed thumbnails and empty workspace
+  dividers are removed while the remaining tiles slide toward the launcher.
+  `DockWindowDrawerExplosion = YES` adds a short fragment effect before sliding;
+  both animations respect `DisableAnimations`.
+
 - **Window preview drawers:** 700 ms hover or a plain left-click on a multiwindow
   launcher opens workspace-grouped snapshots. Hover temporarily raises windows
   and reveals minimized windows. Other-workspace tiles are grayscale; sustained

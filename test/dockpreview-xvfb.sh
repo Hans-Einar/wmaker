@@ -1,6 +1,6 @@
 #!/bin/sh
 # Requires Xvfb, libXtst development files, and (optionally) xcompmgr.
-# Usage: test/dockpreview-xvfb.sh [left|right] [composite|plain] [dock|clip|clip-auto|drawer]
+# Usage: test/dockpreview-xvfb.sh [left|right] [composite|plain] [dock|clip|clip-auto|drawer] [plain|effects]
 set -eu
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 run=$(mktemp -d /tmp/wmaker-dockpreview.XXXXXX)
@@ -76,10 +76,17 @@ STATE
     ;;
 *) echo "Unknown layout: $layout" >&2; exit 2 ;;
 esac
-cat > "$run/Defaults/WindowMaker" <<'DEFAULTS'
+animations=YES
+explosion=NO
+if [ "${4:-plain}" = effects ]; then
+    animations=NO
+    explosion=YES
+fi
+cat > "$run/Defaults/WindowMaker" <<DEFAULTS
 {
  DockWindowDrawer = YES;
- DisableAnimations = YES;
+ DisableAnimations = $animations;
+ DockWindowDrawerExplosion = $explosion;
  WorkspaceNameDisplayPosition = center;
  WorkspacePager = NO;
  FocusMode = manual;
@@ -100,7 +107,7 @@ while [ ! -s "$run/display" ]; do
 done
 DISPLAY=:$(cat "$run/display")
 export DISPLAY
-WMAKER_USER_ROOT="$run" "$repo/src/wmaker" "$wm_option" --no-autolaunch >"$run/wmaker.log" 2>&1 &
+WMAKER_USER_ROOT="$run" "$repo/src/wmaker" "$wm_option" --no-autolaunch --for-real >"$run/wmaker.log" 2>&1 &
 wm_pid=$!
 sleep 1
 if [ "${2:-composite}" = composite ]; then
@@ -110,7 +117,7 @@ if [ "${2:-composite}" = composite ]; then
     kill -0 "$compositor_pid"
 fi
 kill -0 "$wm_pid"
-"$run/test" "$side" "$run/drawer.ppm" "$layout"
+"$run/test" "$side" "$run/drawer.ppm" "$layout" "${4:-plain}"
 kill -0 "$wm_pid"
 if grep -E 'internal X error|fatal error|segmentation fault' "$run/wmaker.log"; then
     echo "Window Maker reported an error" >&2

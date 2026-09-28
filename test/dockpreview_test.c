@@ -143,6 +143,10 @@ static Window client(const char *name, unsigned long color)
 	XClassHint class = { "previewtest", "PreviewTest" };
 	Window window = XCreateSimpleWindow(display, root, 180, 190, 240, 120, 0, 0, color);
 	XStoreName(display, window, name);
+	{
+		Atom close = XInternAtom(display, "WM_DELETE_WINDOW", False);
+		XSetWMProtocols(display, window, &close, 1);
+	}
 	XSetClassHint(display, window, &class);
 	XMapWindow(display, window);
 	pause_ms(250);
@@ -211,7 +215,9 @@ static void screenshot(const char *path)
 
 int main(int argc, char **argv)
 {
-	Window first, second, other, popup, extra[10];
+	Window first, second, other, popup, victim, extra[10];
+	XEvent close_event;
+	int before_width, close_x, animated, saw_slide, frame, logical;
 	XWindowAttributes attr;
 	XImage *image;
 	unsigned long near_pixel, far_pixel;
@@ -223,6 +229,7 @@ int main(int argc, char **argv)
 		return 2;
 	root = DefaultRootWindow(display);
 	right = argc > 1 && strcmp(argv[1], "right") == 0;
+	animated = argc > 4 && strcmp(argv[4], "effects") == 0;
 	clip = argc > 3 && strncmp(argv[3], "clip", 4) == 0;
 	persistent_drawer = argc > 3 && strcmp(argv[3], "drawer") == 0;
 	auto_collapse = persistent_drawer || (argc > 3 && strcmp(argv[3], "clip-auto") == 0);
@@ -364,10 +371,76 @@ int main(int argc, char **argv)
 	XGetWindowAttributes(display, other, &attr);
 	check(attr.map_state == IsViewable, "click restores a minimized window");
 
+	/* The client decides when a close request is accepted (or cancelled). */
+	victim = client("Close request", 0xdd2222);
 	popup = open_drawer();
+	XGetWindowAttributes(display, popup, &attr);
+	before_width = attr.width;
+	close_x = right ? attr.width - 10 : 54;
+	move(attr.x + (right ? attr.width - 32 : 32), attr.y + 25);
+	pause_ms(80);
+	check(pixel_at(popup, close_x - 8, 2) == 0xffffff,
+	      "hover immediately shows the top-right close button");
+	if (argc > 2)
+		screenshot(argv[2]);
+	XDeleteProperty(display, victim, XInternAtom(display, "WM_PROTOCOLS", False));
+	pause_ms(150);
+	move(attr.x + close_x, attr.y + 10);
+	click(Button1);
+	check(!XCheckTypedWindowEvent(display, victim, ClientMessage, &close_event) && drawer() == popup,
+	      "unsupported close never force-kills the application");
+	{
+		Atom close = XInternAtom(display, "WM_DELETE_WINDOW", False);
+		XSetWMProtocols(display, victim, &close, 1);
+	}
+	pause_ms(150);
+	click(Button1);
+	check(XCheckTypedWindowEvent(display, victim, ClientMessage, &close_event) &&
+	      (Atom)close_event.xclient.data.l[0] == XInternAtom(display, "WM_DELETE_WINDOW", False),
+	      "close button sends the normal window close protocol");
+	XGetWindowAttributes(display, popup, &attr);
+	check(drawer() == popup && attr.width == before_width,
+	      "a delayed or cancelled close leaves the thumbnail in place");
+	XDestroyWindow(display, victim);
+	if (animated) {
+		saw_slide = 0;
+		for (frame = 0; frame < 30; frame++) {
+			pause_ms(20);
+			if (drawer() != popup)
+				break;
+			XGetWindowAttributes(display, popup, &attr);
+			image = XGetImage(display, popup, 0, 0, attr.width, 64, AllPlanes, ZPixmap);
+			for (logical = 0; logical < 128; logical++) {
+				unsigned long pixel = XGetPixel(image, right ? attr.width - 1 - logical : logical, 25) & 0xffffff;
+				if ((pixel & 255) > 180 && ((pixel >> 8) & 255) < 60 && ((pixel >> 16) & 255) < 60)
+					break;
+			}
+			XDestroyImage(image);
+			if (logical > 4 && logical < 63)
+				saw_slide = 1;
+		}
+		check(saw_slide, "animation paints intermediate tile positions while filling the gap");
+	}
+	pause_ms(700);
+	check(drawer() == popup, "closing a window keeps the drawer open");
+	XGetWindowAttributes(display, popup, &attr);
+	check(attr.width == before_width - 64, "remaining tiles fill the removed tile's gap");
+	check((pixel_at(popup, right ? attr.width - 32 : 32, 25) & 255) > 180,
+	      "the next window slides toward the launcher without reordering");
+	before_width = attr.width;
+	/* Red one is the outermost tile, on a different workspace. */
+	move(attr.x + (right ? 54 : attr.width - 10), attr.y + 10);
+	click(Button1);
+	check(XCheckTypedWindowEvent(display, first, ClientMessage, &close_event) &&
+	      (Atom)close_event.xclient.data.l[0] == XInternAtom(display, "WM_DELETE_WINDOW", False),
+	      "close button targets the correct off-workspace window");
+	check(property(root, "_NET_CURRENT_DESKTOP") == 1, "close click does not switch workspace");
 	XDestroyWindow(display, first);
-	pause_ms(450);
-	check(drawer() == None, "closing a listed client safely dismisses the drawer");
+	pause_ms(700);
+	check(drawer() == popup, "external window closure also keeps the drawer open");
+	XGetWindowAttributes(display, popup, &attr);
+	check(attr.width == before_width - 64, "external closure removes only its thumbnail");
+	escape();
 	open_drawer();
 	move(320, 450);
 	pause_ms(450);
@@ -401,8 +474,10 @@ int main(int argc, char **argv)
 	click(Button1);
 	check(drawer() == None, "a single window retains the normal icon click action");
 	move(320, 450);
+	popup = open_drawer();
 	XDestroyWindow(display, other);
-	pause_ms(300);
+	pause_ms(700);
+	check(drawer() == None, "closing the final window dismisses the empty drawer");
 	move(320, 450);
 	pause_ms(400);
 	prepare_anchor();

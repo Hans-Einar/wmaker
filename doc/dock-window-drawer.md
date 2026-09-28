@@ -41,6 +41,31 @@ and returns to the workspace and focus from which the drawer was opened.
 Clicking a tile selects that window, restores it if needed, and commits its
 workspace; it then stays raised.
 
+Moving onto a thumbnail immediately shows a small close button in its top-right
+corner. Clicking its white cross requests a normal window close, including any
+unsaved-work confirmation the application needs. The drawer stays open; the tile
+is removed only when the window actually closes. Unsupported close requests are
+disabled rather than force-killing the application. A close click on a grayscale
+tile does not switch workspaces.
+
+After a window closes, remaining tiles slide toward the launcher over 220 ms
+(leftward for a left-side dock, mirrored for a right-side dock). Their original
+workspace order stays intact, empty workspace dividers disappear, and closing
+the final window dismisses the drawer. Tile activation is suspended during the
+slide so a queued click cannot accidentally close the window moving into its
+place. Closing a window elsewhere also updates the open drawer.
+
+An optional fragment explosion, adapted from the undocking Kaboom effect, plays
+inside the drawer before the slide. Enable it in `GNUstep/Defaults/WindowMaker`
+with `DockWindowDrawerExplosion = YES`, or run:
+
+```
+wdwrite WindowMaker DockWindowDrawerExplosion YES
+```
+
+It defaults to `NO`. Both effects honor `DisableAnimations = YES`; the explosion
+uses timer-driven drawing instead of blocking the event loop.
+
 An ordinary hover-opened drawer closes when the pointer moves away, with a
 short grace period for crossing into it. A click-opened drawer stays open until
 an outside click, Escape, or a selection. If the list exceeds the monitor width,
@@ -80,6 +105,7 @@ test/dockpreview-xvfb.sh right plain
 test/dockpreview-xvfb.sh left composite clip
 test/dockpreview-xvfb.sh right plain clip-auto
 test/dockpreview-xvfb.sh right composite drawer
+test/dockpreview-xvfb.sh right composite drawer effects
 ```
 
 It requires Xvfb and libXtst development files; the `composite` run also
@@ -89,6 +115,8 @@ crossing, temporary hover raising and restoration, click-to-keep-on-top,
 grayscale workspace browsing with fixed order, Escape/outside-click rollback,
 minimized hover previews, click activation, closing clients, and overflow
 scrolling, including repeated workspace hover with workspace-name effects.
+It also checks close requests, cancelled/unsupported closes, off-workspace close
+targeting, thumbnail removal, and intermediate slide positions with effects on.
 Test logs and a
 PPM screenshot are retained in the printed temporary directory. It does not
 replace the running desktop window manager or install the new binary.

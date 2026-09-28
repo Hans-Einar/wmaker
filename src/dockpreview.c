@@ -10,6 +10,7 @@
 
 #include "wconfig.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
 #include <time.h>
@@ -24,6 +25,7 @@
 #include "dock.h"
 #include "framewin.h"
 #include "actions.h"
+#include "client.h"
 #include "stacking.h"
 #include "workspace.h"
 #include "misc.h"
@@ -36,19 +38,34 @@
 #define LEAVE_TICKS 3
 #define SEPARATOR_WIDTH 24
 #define SCROLL_WIDTH 18
+#define CLOSE_SIZE 16
+#define FRAME_INTERVAL 16
+#define SLIDE_DURATION 220
+#define BURST_DURATION 220
+#define BURST_PIECES 256
 
 typedef struct {
 	Window client;
 	Pixmap tile, gray_tile;
-	int offset, width, workspace;
+	int offset, from_offset, width, workspace;
 } PreviewEntry;
+
+typedef struct {
+	Pixmap tile;
+	int x;
+	signed char vx[BURST_PIECES], vy[BURST_PIECES];
+} PreviewBurst;
 
 typedef struct WDockPreview {
 	WScreen *scr;
 	WAppIcon *anchor;
 	WCoreWindow *core;
 	Pixmap buffer;
-	Window hovered_client, revealed_client, original_focus;
+	Window hovered_client, revealed_client, original_focus, button_client;
+	uint64_t layout_started;
+	int burst_duration, old_scroll, target_scroll, max_width;
+	PreviewBurst *bursts;
+	int burst_count;
 	uint64_t hover_started;
 	Bool switching, cancel_pending, browsing, click_opened, pointer_grabbed, escape_grabbed;
 	int display_workspace, original_last_workspace;
@@ -63,6 +80,7 @@ typedef struct WDockPreview {
 
 static void paint(WObjDescriptor *desc, XEvent *event);
 static void closePreview(WScreen *scr, Bool commit);
+static void updateButton(WDockPreview *preview, int x, int y);
 
 static uint64_t monotonicMilliseconds(void)
 {
@@ -226,6 +244,7 @@ static Bool updatePeek(WDockPreview *preview)
 
 	if (XQueryPointer(dpy, preview->scr->root_win, &root, &child, &x, &y, &wx, &wy, &mask) &&
 	    child == preview->core->window) {
+		updateButton(preview, x - preview->x, y - preview->y);
 		x -= preview->x;
 		if (preview->right)
 			x = preview->core->width - 1 - x;
@@ -240,6 +259,8 @@ static Bool updatePeek(WDockPreview *preview)
 			}
 		}
 	}
+	if (!client)
+		updateButton(preview, -1, -1);
 	if (client != preview->hovered_client) {
 		restorePeek(preview);
 		preview->hovered_client = client;
@@ -349,6 +370,9 @@ static void closePreview(WScreen *scr, Bool commit)
 		if (preview->entries[i].gray_tile)
 			XFreePixmap(dpy, preview->entries[i].gray_tile);
 	}
+	for (i = 0; i < preview->burst_count; i++)
+		XFreePixmap(dpy, preview->bursts[i].tile);
+	wfree(preview->bursts);
 	if (preview->buffer)
 		XFreePixmap(dpy, preview->buffer);
 	wrelease(preview->anchor);
@@ -359,6 +383,13 @@ static void closePreview(WScreen *scr, Bool commit)
 void wDockPreviewHide(WScreen *scr)
 {
 	closePreview(scr, False);
+}
+
+void wDockPreviewHideForIcon(WAppIcon *icon)
+{
+	WScreen *scr = icon->icon->core->screen_ptr;
+	if (scr->dock_preview && scr->dock_preview->anchor == icon)
+		wDockPreviewHide(scr);
 }
 
 Bool wDockPreviewHandleKey(WScreen *scr, XKeyEvent *event)
@@ -478,6 +509,89 @@ static Pixmap grayscaleTile(WScreen *scr, Pixmap tile)
 	return gray;
 }
 
+/* Positions are logical distances from the launcher; mirroring happens only
+ * when painting/hit-testing, so the close button is always visually top-right. */
+static int slideOffset(WDockPreview *preview, PreviewEntry *entry)
+{
+	int elapsed;
+	if (!preview->layout_started)
+		return entry->offset;
+	elapsed = (int)(monotonicMilliseconds() - preview->layout_started) - preview->burst_duration;
+	elapsed = WMAX(0, WMIN(SLIDE_DURATION, elapsed));
+	return entry->offset + (entry->from_offset - entry->offset) *
+		(SLIDE_DURATION - elapsed) * (SLIDE_DURATION - elapsed) / (SLIDE_DURATION * SLIDE_DURATION);
+}
+
+static int entryX(WDockPreview *preview, PreviewEntry *entry)
+{
+	int x = slideOffset(preview, entry) - preview->scroll;
+	return preview->right ? preview->core->width - x - entry->width : x;
+}
+
+static PreviewEntry *entryAt(WDockPreview *preview, int x, int y)
+{
+	int i, logical = preview->right ? preview->core->width - 1 - x : x;
+	if (preview->layout_started || y < 0 || y >= ICON_SIZE || logical < 0 || logical >= preview->viewport)
+		return NULL;
+	logical += preview->scroll;
+	for (i = 0; i < preview->count; i++) {
+		PreviewEntry *entry = &preview->entries[i];
+		if (entry->client && logical >= entry->offset && logical < entry->offset + entry->width)
+			return entry;
+	}
+	return NULL;
+}
+
+static Bool canClose(WWindow *wwin)
+{
+	return wwin && !wwin->flags.destroyed && wwin->protocols.DELETE_WINDOW && !WFLAGP(wwin, no_closable);
+}
+
+static void updateButton(WDockPreview *preview, int x, int y)
+{
+	PreviewEntry *entry = entryAt(preview, x, y);
+	Window client = entry ? entry->client : None;
+	if (preview->button_client != client) {
+		preview->button_client = client;
+		paint(&preview->core->descriptor, NULL);
+	}
+}
+
+Bool wDockPreviewHandleMotion(WScreen *scr, XMotionEvent *event)
+{
+	WDockPreview *preview = scr ? scr->dock_preview : NULL;
+	if (!preview || !preview->core || event->window != preview->core->window)
+		return False;
+	if (!preview->switching)
+		updateButton(preview, event->x, event->y);
+	return True;
+}
+
+/* The dock's Kaboom uses small fragments with upward velocity and gravity.
+ * Draw that effect into our backing pixmap on timer ticks: DoKaboom itself
+ * unmaps its window and blocks the event loop while drawing on the root. */
+static void paintBursts(WDockPreview *preview)
+{
+	int i, row, col, k, size = ICON_KABOOM_PIECE_SIZE;
+	int elapsed = (int)(monotonicMilliseconds() - preview->layout_started);
+	if (!preview->burst_count || elapsed >= preview->burst_duration)
+		return;
+	for (i = 0; i < preview->burst_count; i++) {
+		PreviewBurst *burst = &preview->bursts[i];
+		for (row = 0, k = 0; row < ICON_SIZE / size; row++) {
+			for (col = 0; col < ICON_SIZE / size && k < BURST_PIECES; col++, k++) {
+				int x, y, frame = elapsed / 20;
+				if (!burst->vy[k])
+					continue;
+				x = burst->x + col * size + burst->vx[k] * frame / 2;
+				y = row * size + burst->vy[k] * frame / 2 + frame * frame / 8;
+				XCopyArea(dpy, burst->tile, preview->buffer, preview->scr->draw_gc,
+					  col * size, row * size, size, size, x, y);
+			}
+		}
+	}
+}
+
 static void paint(WObjDescriptor *desc, XEvent *event)
 {
 	WDockPreview *preview = desc->parent;
@@ -490,17 +604,24 @@ static void paint(WObjDescriptor *desc, XEvent *event)
 	XFillRectangle(dpy, preview->buffer, scr->draw_gc, 0, 0, preview->core->width, ICON_SIZE);
 	for (i = 0; i < preview->count; i++) {
 		PreviewEntry *entry = &preview->entries[i];
-		x = entry->offset - preview->scroll;
-		if (preview->right)
-			x = preview->core->width - x - entry->width;
+		x = entryX(preview, entry);
 		if (entry->tile) {
 			WWindow *wwin = wWindowFor(entry->client);
-			Bool current = wwin && (IS_OMNIPRESENT(wwin) ||
+			Bool current = wwin && wwin->frame && (IS_OMNIPRESENT(wwin) ||
 					       wwin->frame->workspace == scr->current_workspace);
 			Pixmap tile = !current && entry->gray_tile ? entry->gray_tile : entry->tile;
 
 			XCopyArea(dpy, tile, preview->buffer, scr->draw_gc,
 				  0, 0, ICON_SIZE, ICON_SIZE, x, 0);
+			if (entry->client == preview->button_client && !preview->layout_started) {
+				int bx = x + ICON_SIZE - CLOSE_SIZE - 2;
+				XSetForeground(dpy, scr->draw_gc, scr->black_pixel);
+				XFillRectangle(dpy, preview->buffer, scr->draw_gc, bx, 2, CLOSE_SIZE, CLOSE_SIZE);
+				XSetForeground(dpy, scr->draw_gc, canClose(wwin) ? scr->white_pixel : scr->light_pixel);
+				XDrawRectangle(dpy, preview->buffer, scr->draw_gc, bx, 2, CLOSE_SIZE - 1, CLOSE_SIZE - 1);
+				XDrawLine(dpy, preview->buffer, scr->draw_gc, bx + 4, 6, bx + CLOSE_SIZE - 5, CLOSE_SIZE - 3);
+				XDrawLine(dpy, preview->buffer, scr->draw_gc, bx + CLOSE_SIZE - 5, 6, bx + 4, CLOSE_SIZE - 3);
+			}
 		} else {
 			XSetForeground(dpy, scr->draw_gc, scr->light_pixel);
 			XDrawLine(dpy, preview->buffer, scr->draw_gc, x + 2, 4, x + 2, ICON_SIZE - 5);
@@ -509,6 +630,7 @@ static void paint(WObjDescriptor *desc, XEvent *event)
 				 (ICON_SIZE - WMFontHeight(scr->icon_title_font)) / 2, SEPARATOR_WIDTH - 6);
 		}
 	}
+	paintBursts(preview);
 	if (preview->length > preview->viewport) {
 		control = preview->right ? 0 : preview->viewport;
 		XSetForeground(dpy, scr->draw_gc, scr->black_pixel);
@@ -542,6 +664,24 @@ static void mouseDown(WObjDescriptor *desc, XEvent *event)
 		}
 		wDockPreviewHide(preview->scr);
 		return;
+	}
+	/* Do not let queued clicks close a neighbour while tiles fill the gap. */
+	if (preview->layout_started)
+		return;
+	if (event->xbutton.button == Button1) {
+		PreviewEntry *entry = entryAt(preview, x, event->xbutton.y);
+		if (entry && x >= entryX(preview, entry) + ICON_SIZE - CLOSE_SIZE - 2 &&
+		    x < entryX(preview, entry) + ICON_SIZE - 2 &&
+		    event->xbutton.y >= 2 && event->xbutton.y < 2 + CLOSE_SIZE) {
+			WWindow *wwin = wWindowFor(entry->client);
+			preview->click_opened = True;
+			if (canClose(wwin))
+				wClientSendProtocol(wwin, w_global.atom.wm.delete_window, event->xbutton.time);
+			else
+				XBell(dpy, 0);
+			/* Only remove a tile after the application actually closes it. */
+			return;
+		}
 	}
 	if (event->xbutton.button == Button4)
 		direction = -1;
@@ -578,11 +718,124 @@ static void mouseDown(WObjDescriptor *desc, XEvent *event)
 	}
 }
 
+static void freeBursts(WDockPreview *preview)
+{
+	int i;
+	for (i = 0; i < preview->burst_count; i++)
+		XFreePixmap(dpy, preview->bursts[i].tile);
+	wfree(preview->bursts);
+	preview->bursts = NULL;
+	preview->burst_count = 0;
+}
+
+static Bool finishLayout(WDockPreview *preview)
+{
+	int width;
+	freeBursts(preview);
+	preview->layout_started = 0;
+	if (!preview->count) {
+		wDockPreviewHide(preview->scr);
+		return False;
+	}
+	width = WMIN(preview->length, preview->max_width);
+	preview->viewport = width - (preview->length > width ? SCROLL_WIDTH : 0);
+	preview->scroll = WMIN(preview->scroll, WMAX(0, preview->length - preview->viewport));
+	preview->x = preview->right ? preview->anchor_x - width : preview->anchor_x + ICON_SIZE;
+	/* The original backing pixmap is at least as large as this shrinking window. */
+	wCoreConfigure(preview->core, preview->x, preview->y, width, ICON_SIZE);
+	paint(&preview->core->descriptor, NULL);
+	return True;
+}
+
+static Bool removeDeadEntries(WDockPreview *preview)
+{
+	Bool *keep = wmalloc(sizeof(Bool) * preview->count), changed = False;
+	int i, j, next, length = 0, count = 0, width, viewport;
+
+	for (i = 0; i < preview->count; i++) {
+		PreviewEntry *entry = &preview->entries[i];
+		WWindow *wwin = entry->client ? wWindowFor(entry->client) : NULL;
+		keep[i] = entry->client && wwin && matches(preview->anchor, wwin) &&
+			(IS_OMNIPRESENT(wwin) || wwin->frame->workspace == entry->workspace);
+		if (entry->client && !keep[i])
+			changed = True;
+	}
+	if (!changed) {
+		wfree(keep);
+		return True;
+	}
+	/* A separator survives exactly as long as its original workspace group. */
+	for (i = 0; i < preview->count; i++) {
+		if (preview->entries[i].client)
+			continue;
+		for (next = i + 1; next < preview->count && preview->entries[next].client; next++)
+			keep[i] |= keep[next];
+	}
+	restorePeek(preview);
+	preview->button_client = None;
+	for (i = 0; i < preview->count; i++) {
+		PreviewEntry entry = preview->entries[i];
+		if (keep[i]) {
+			entry.from_offset = entry.offset;
+			entry.offset = length;
+			length += entry.width;
+			preview->entries[count++] = entry;
+		} else {
+			if (entry.client && !wWindowFor(entry.client) &&
+			    wPreferences.dock_window_drawer_explosion && !wPreferences.no_animations) {
+				PreviewBurst *burst;
+				preview->bursts = wrealloc(preview->bursts, sizeof(PreviewBurst) * (preview->burst_count + 1));
+				burst = &preview->bursts[preview->burst_count++];
+				burst->x = entryX(preview, &entry);
+				if (entry.workspace != preview->scr->current_workspace && entry.gray_tile) {
+					burst->tile = entry.gray_tile;
+					entry.gray_tile = None;
+				} else {
+					burst->tile = entry.tile;
+					entry.tile = None;
+				}
+				for (j = 0; j < BURST_PIECES; j++) {
+					burst->vx[j] = rand() % 17 - 8;
+					burst->vy[j] = rand() % 2 ? -15 - rand() % 7 : 0;
+				}
+			}
+			if (entry.tile)
+				XFreePixmap(dpy, entry.tile);
+			if (entry.gray_tile)
+				XFreePixmap(dpy, entry.gray_tile);
+		}
+	}
+	wfree(keep);
+	preview->count = count;
+	preview->length = length;
+	preview->old_scroll = preview->scroll;
+	width = WMIN(length, preview->max_width);
+	viewport = width - (length > width ? SCROLL_WIDTH : 0);
+	preview->target_scroll = WMIN(preview->scroll, WMAX(0, length - viewport));
+	preview->burst_duration = preview->burst_count ? BURST_DURATION : 0;
+	if (wPreferences.no_animations)
+		return finishLayout(preview);
+	preview->layout_started = monotonicMilliseconds();
+	paint(&preview->core->descriptor, NULL);
+	return True;
+}
+
+static Bool advanceLayout(WDockPreview *preview)
+{
+	int elapsed = (int)(monotonicMilliseconds() - preview->layout_started) - preview->burst_duration;
+	if (elapsed >= SLIDE_DURATION || wPreferences.no_animations)
+		return finishLayout(preview);
+	elapsed = WMAX(0, elapsed);
+	preview->scroll = preview->target_scroll + (preview->old_scroll - preview->target_scroll) *
+		(SLIDE_DURATION - elapsed) * (SLIDE_DURATION - elapsed) / (SLIDE_DURATION * SLIDE_DURATION);
+	paint(&preview->core->descriptor, NULL);
+	return True;
+}
+
 static void checkPointer(void *data)
 {
 	WDockPreview *preview = data;
 	WAppIcon *icon = preview->anchor;
-	int i;
 
 	preview->timer = NULL;
 	if (!wPreferences.dock_window_drawer || icon->destroyed || !icon->docked || !icon->dock ||
@@ -592,24 +845,21 @@ static void checkPointer(void *data)
 		wDockPreviewHide(preview->scr);
 		return;
 	}
-	for (i = 0; i < preview->count; i++) {
-		PreviewEntry *entry = &preview->entries[i];
-		WWindow *wwin = entry->client ? wWindowFor(entry->client) : NULL;
-		if (entry->client && (!wwin || !matches(icon, wwin) ||
-		    (!IS_OMNIPRESENT(wwin) && wwin->frame->workspace != entry->workspace))) {
-			wDockPreviewHide(preview->scr);
+	if (preview->layout_started) {
+		if (!advanceLayout(preview))
 			return;
-		}
-	}
-	if (!updatePeek(preview))
+	} else if (!removeDeadEntries(preview)) {
 		return;
-	if (pointerInside(preview, False) || preview->browsing || preview->click_opened)
+	}
+	if (!preview->layout_started && !updatePeek(preview))
+		return;
+	if (pointerInside(preview, False) || preview->browsing || preview->click_opened || preview->layout_started)
 		preview->outside = 0;
 	else if (++preview->outside >= LEAVE_TICKS) {
 		wDockPreviewHide(preview->scr);
 		return;
 	}
-	preview->timer = WMAddTimerHandler(POINTER_INTERVAL, checkPointer, preview);
+	preview->timer = WMAddTimerHandler(preview->layout_started ? FRAME_INTERVAL : POINTER_INTERVAL, checkPointer, preview);
 }
 
 static void appendEntry(WDockPreview *preview, WWindow *wwin, int workspace)
@@ -681,6 +931,7 @@ static void showPreview(void *data)
 		wDockPreviewHide(scr);
 		return;
 	}
+	preview->max_width = available;
 	width = WMIN(preview->length, available);
 	preview->viewport = width - (preview->length > width ? SCROLL_WIDTH : 0);
 	preview->x = preview->right ? preview->anchor_x - width : preview->anchor_x + ICON_SIZE;
@@ -712,7 +963,7 @@ static void showPreview(void *data)
 	preview->escape_key = XKeysymToKeycode(dpy, XK_Escape);
 	XGrabKey(dpy, preview->escape_key, AnyModifier, scr->root_win, False, GrabModeAsync, GrabModeAsync);
 	preview->escape_grabbed = True;
-	preview->timer = WMAddTimerHandler(POINTER_INTERVAL, checkPointer, preview);
+	preview->timer = WMAddTimerHandler(preview->layout_started ? FRAME_INTERVAL : POINTER_INTERVAL, checkPointer, preview);
 }
 
 void wDockPreviewEnter(WAppIcon *icon)
