@@ -22,5 +22,6 @@
 #define WMCYCLING_H
 
 void StartWindozeCycle(WWindow *wwin, XEvent *event, Bool next, Bool class_only);
+void wCycleWorkspaceWindows(WScreen *scr, long steps, Window anchor, Bool class_only);
 
 #endif /* WMCYCLING_H */

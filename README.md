@@ -257,6 +257,16 @@ Let the service inherit `DISPLAY` and `XAUTHORITY` rather than hardcoding them.
 The controller waits for the WM interface to become ready, and `--no-block`
 keeps Window Maker's startup script from waiting on the controller.
 
+Hold **Ctrl** before starting a three-finger horizontal swipe to cycle windows
+on the current workspace: left selects the next window, right the previous one.
+Hold **Ctrl+Shift** to cycle only windows of the focused application's type
+(WM_CLASS), including independent Kitty instances. Both modes wrap, raise and
+focus the selected window, and restore minimized/hidden windows. Windows excluded
+from the switch panel are skipped. The order stays stable as focus changes.
+Modifiers and the application anchor are captured when three contacts first
+appear and retained through partial finger lifts until all fingers are lifted.
+Unmodified horizontal swipes still switch workspaces; vertical shading is unchanged.
+
 Defaults follow Gesture Lab: 15 mm per workspace width, C=0.5, 5 mm axis-lock
 threshold, 40 mm curtain height, maximum 10 workspaces, wrap off, axis locking
 on, discrete workspace jumps. `wmtouchpad --help` lists tuning flags. Workspace
@@ -295,4 +305,5 @@ payload races. The WM rechecks the opt-in preference and target state per action
 Validation: `python3 tests/touchpad.py` runs real fork binaries in private Xvfb
 sessions with synthetic contact frames. It covers disabled preference, workspace
 limits/wrap, pause/resume, one/two-finger exclusion, shade/unshade, target changes,
-and destroyed targets. It never opens the real input device.
+destroyed targets, Ctrl/Ctrl+Shift cycling, latched modifiers, workspace isolation,
+and minimized-window restoration and raising. It never opens the real input device.

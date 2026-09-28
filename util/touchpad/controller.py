@@ -21,6 +21,7 @@ class Controller:
         p.curtain_travel=args.curtain_height;p.filtered=True;p.wrap=args.wrap
         self.count=0;self.sequence=False;self.blocked=False;self.target=0;self.shaded=False
         self.current_desktop=1;self.paused_history=False
+        self.cycle_operation=0;self.cycle_position=1
     def packet(self,packet):
         if 'error' in packet:raise RuntimeError(packet['error'])
         if 'device' in packet:
@@ -44,16 +45,30 @@ class Controller:
             if not state or not state[1]:self.blocked=True;return
             _,_,workspace,count,target,shaded,_=state
             if count<1:self.blocked=True;return
-            self.preview.configure_bounds(min(count,self.args.max_desktops),self.args.wrap)
-            # Do not jump into the configured range if the user is outside it.
-            if workspace>=self.preview.max_desktops:self.blocked=True;return
-            self.preview.desktop=workspace+1;self.current_desktop=workspace+1
+            modifiers=self.connection.modifiers()
+            self.cycle_operation=(4 if modifiers & 1 else 3) if modifiers & 4 else 0
+            if self.cycle_operation:
+                # Reuse the motion thresholds, but keep an unbounded virtual step
+                # index. Window wrapping is handled by the WM's eligible list.
+                self.preview.configure_bounds(2,True)
+                self.preview.desktop=1;self.cycle_position=1
+            else:
+                self.preview.configure_bounds(min(count,self.args.max_desktops),self.args.wrap)
+                # Do not jump into the configured range if the user is outside it.
+                if workspace>=self.preview.max_desktops:self.blocked=True;return
+                self.preview.desktop=workspace+1
+            self.current_desktop=workspace+1
             self.shaded=bool(shaded);self.target=target
             self.preview.curtain=0. if shaded else 1.
             self.preview.begin(3,time.monotonic());self.sequence=True;return
         if previous!=3:return  # rebase when a finger joins/leaves
         self.preview.update(3,dx,dy,time.monotonic())
-        if self.preview.axis=='x' and self.preview.desktop!=self.current_desktop:
+        if self.preview.axis=='x' and self.cycle_operation:
+            delta=self.preview.virtual_desktop-self.cycle_position
+            if delta:
+                self.perform(self.cycle_operation,delta,self.target)
+                self.cycle_position=self.preview.virtual_desktop
+        elif self.preview.axis=='x' and self.preview.desktop!=self.current_desktop:
             self.perform(1,self.preview.desktop-1,0)
             self.current_desktop=self.preview.desktop
         elif self.preview.axis=='y' and self.target:
@@ -65,7 +80,8 @@ class Controller:
                 self.perform(2,int(desired),self.target);self.shaded=desired
     def perform(self,operation,value,target):
         if self.args.verbose or self.args.dry_run:
-            print(f"{'Would do' if self.args.dry_run else 'Action'}: {'workspace' if operation==1 else 'shade'} {value+1 if operation==1 else value}",flush=True)
+            action={1:'workspace',2:'shade',3:'cycle windows',4:'cycle application'}[operation]
+            print(f"{'Would do' if self.args.dry_run else 'Action'}: {action} {value+1 if operation==1 else value}",flush=True)
         if not self.args.dry_run:
             state=self.connection.request(operation,value,target)
             if not state or not state[1]:self.blocked=True
@@ -73,7 +89,7 @@ class Controller:
 
 def arguments():
     p=argparse.ArgumentParser(prog='wmtouchpad',description=__doc__)
-    p.add_argument('--swipe-length',type=float,default=15,help='mm of weighted motion per workspace (default 15)')
+    p.add_argument('--swipe-length',type=float,default=15,help='mm of weighted motion per workspace or window (default 15)')
     p.add_argument('--coefficient',type=float,default=.5,help='acceleration C in dx * max(1, abs(dx)*C) (default .5)')
     p.add_argument('--lock-threshold',type=float,default=5,help='mm before the axis locks (default 5)')
     p.add_argument('--curtain-height',type=float,default=40,help='mm of travel for shade/unshade (default 40)')

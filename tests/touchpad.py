@@ -48,7 +48,7 @@ with tempfile.TemporaryDirectory(prefix='wmaker-touchpad-test-') as tmp:
         (defaults/'WindowMaker').write_text('{TouchpadGestures='+('YES' if enabled else 'NO')+';SaveSessionOnExit=NO;DisableAnimations=YES;}')
         (defaults/'WMState').write_text('{Workspaces=('+','.join('{Name=W'+str(i)+';}' for i in range(10))+');Applications=();}')
         log=(profile/'wm.log').open('w+')
-        wm=subprocess.Popen([str(ROOT/'src/wmaker'),'--no-autolaunch'],env=dict(os.environ,DISPLAY=display,WMAKER_USER_ROOT=str(profile)),stdout=log,stderr=log)
+        wm=subprocess.Popen([str(ROOT/'src/wmaker'),'--for-real','--no-autolaunch'],env=dict(os.environ,DISPLAY=display,WMAKER_USER_ROOT=str(profile)),stdout=log,stderr=log)
         connection=None
         old_display=os.environ.get('DISPLAY');os.environ['DISPLAY']=display
         try:
@@ -60,6 +60,8 @@ with tempfile.TemporaryDirectory(prefix='wmaker-touchpad-test-') as tmp:
             assert state and state[1]==enabled and state[3]==10,state
             if not enabled:
                 state=connection.request(1,5);assert state[2]==0
+                assert connection.request(3,1)[4]==state[4]
+                assert connection.request(4,1)[4]==state[4]
                 print('PASS disabled preference rejects touchpad actions');continue
             control=model(connection);packet(control,3)
             for i in range(15):packet(control,3,-.01*(i+1))
@@ -111,10 +113,83 @@ with tempfile.TemporaryDirectory(prefix='wmaker-touchpad-test-') as tmp:
             x.XDestroyWindow(d,window);x.XFlush(d);time.sleep(.1)
             assert connection.request(2,1,window) is not None  # stale target is safe
             print('PASS native workspaces, limits/wrap, 3→2→1→3, ignored 1/2 fingers, shade/unshade, stable target, destroyed target')
+            # Real modifier state on this private X server only; never real input.
+            xt=C.CDLL('libXtst.so.6')
+            xt.XTestFakeKeyEvent.argtypes=[C.c_void_p,C.c_uint,C.c_int,C.c_ulong]
+            x.XKeysymToKeycode.argtypes=[C.c_void_p,C.c_ulong]
+            x.XSync.argtypes=[C.c_void_p,C.c_int]
+            def key(symbol,down):
+                xt.XTestFakeKeyEvent(d,x.XKeysymToKeycode(d,symbol),down,0);x.XSync(d,False)
+            class ClassHint(C.Structure):
+                _fields_=[('instance',C.c_char_p),('klass',C.c_char_p)]
+            x.XSetClassHint.argtypes=[C.c_void_p,C.c_ulong,C.POINTER(ClassHint)]
+            def client(instance,klass):
+                win=x.XCreateSimpleWindow(d,connection.root,200,200,240,160,0,0,0x446622)
+                hint=ClassHint(instance,klass);x.XSetClassHint(d,win,C.byref(hint))
+                x.XMapWindow(d,win);x.XFlush(d);time.sleep(.2)
+                assert connection.request()[4]==win
+                return win
+            kitty1=client(b'one',b'kitty');kitty2=client(b'two',b'kitty')
+            # A same-class client on another workspace must never be selected.
+            connection.request(1,1);away=client(b'away',b'kitty');connection.request(1,0)
+            windows=sorted([other,kitty1,kitty2])
+            def focused():
+                state=connection.request();assert state[2]==0,state
+                active=prop(connection,connection.root,'_NET_ACTIVE_WINDOW')
+                assert active==[state[4]],(active,state)
+                return state[4]
+            def swipe(direction=-1):
+                control=model(connection);packet(control,3)
+                for i in range(15):packet(control,3,direction*.01*(i+1))
+                packet(control,0)
+            key(0xffe3,True)  # Control_L
+            start=focused();seen=[]
+            for _ in range(len(windows)):
+                before=focused();swipe()
+                assert focused()==windows[(windows.index(before)+1)%len(windows)]
+                seen.append(focused())
+            assert set(seen)==set(windows) and focused()==start
+            swipe(1);assert focused()==windows[(windows.index(start)-1)%len(windows)]
+            # Releasing Ctrl mid-sequence keeps cycling; partial lift also keeps mode.
+            control=model(connection);packet(control,3);key(0xffe3,False)
+            before=focused()
+            for i in range(15):packet(control,3,-.01*(i+1))
+            assert focused()==windows[(windows.index(before)+1)%len(windows)]
+            packet(control,2,-.15);packet(control,3,-.15)
+            before=focused()
+            for i in range(15):packet(control,3,-.15-.01*(i+1))
+            assert focused()==windows[(windows.index(before)+1)%len(windows)]
+            packet(control,0)
+            # Start on a Kitty, then cycle only its class across separate instances.
+            for _ in windows:
+                if focused()==kitty2:break
+                connection.request(3,1)
+            assert focused()==kitty2
+            key(0xffe3,True);key(0xffe1,True)  # Shift_L
+            swipe();assert focused()==kitty1
+            swipe();assert focused()==kitty2
+            swipe(1);assert focused()==kitty1
+            key(0xffe1,False);key(0xffe3,False)
+            # Minimized current-workspace clients are restored and focused.
+            x.XIconifyWindow.argtypes=[C.c_void_p,C.c_ulong,C.c_int]
+            x.XIconifyWindow(d,kitty2,0);x.XFlush(d);time.sleep(.2)
+            assert prop(connection,kitty2,'WM_STATE')[0]==3
+            connection.request(4,1,kitty1)
+            assert focused()==kitty2 and prop(connection,kitty2,'WM_STATE')[0]==1
+            stacking=prop(connection,connection.root,'_NET_CLIENT_LIST_STACKING')
+            assert all(stacking.index(kitty2)>stacking.index(w) for w in (other,kitty1)),stacking
+            # Closing the class anchor during a gesture must be harmless.
+            x.XDestroyWindow(d,kitty1);x.XFlush(d);time.sleep(.1)
+            before=focused();connection.request(4,1,kitty1);assert focused()==before
+            assert wm.poll() is None
+            print('PASS Ctrl cycling/wrap/reverse, latched modifiers, Ctrl+Shift class filtering, workspace isolation, minimized restore/raise, stale anchor')
         except Exception:
             log.flush();print((profile/'wm.log').read_text());raise
         finally:
             if connection:connection.close()
             if old_display is None:os.environ.pop('DISPLAY',None)
             else:os.environ['DISPLAY']=old_display
-            wm.terminate();wm.wait(timeout=4);server.terminate();server.wait(timeout=4);log.close()
+            wm.terminate()
+            try:wm.wait(timeout=4)
+            except subprocess.TimeoutExpired:wm.kill();wm.wait(timeout=4)
+            server.terminate();server.wait(timeout=4);log.close()

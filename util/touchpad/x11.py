@@ -18,6 +18,7 @@ class Connection:
         P=C.c_void_p;U=C.c_ulong;I=C.c_int
         fn('XOpenDisplay',[C.c_char_p],P);fn('XDefaultRootWindow',[P],U)
         fn('XInternAtom',[P,C.c_char_p,I],U)
+        fn('XQueryPointer',[P,U,C.POINTER(U),C.POINTER(U),C.POINTER(I),C.POINTER(I),C.POINTER(I),C.POINTER(I),C.POINTER(C.c_uint)])
         fn('XCreateSimpleWindow',[P,U,I,I,C.c_uint,C.c_uint,C.c_uint,U,U],U)
         fn('XSendEvent',[P,U,I,C.c_long,C.POINTER(Event)])
         fn('XGetWindowProperty',[P,U,U,C.c_long,C.c_long,I,U,C.POINTER(U),C.POINTER(I),C.POINTER(U),C.POINTER(U),C.POINTER(P)])
@@ -29,6 +30,10 @@ class Connection:
         self.command=x.XInternAtom(self.display,b'_WINDOWMAKER_TOUCHPAD',0)
         self.reply=x.XInternAtom(self.display,b'_WINDOWMAKER_TOUCHPAD_REPLY',0)
         self.serial=0
+    def modifiers(self):
+        root=C.c_ulong();child=C.c_ulong();rx=C.c_int();ry=C.c_int();wx=C.c_int();wy=C.c_int();mask=C.c_uint()
+        self.x.XQueryPointer(self.display,self.root,C.byref(root),C.byref(child),C.byref(rx),C.byref(ry),C.byref(wx),C.byref(wy),C.byref(mask))
+        return mask.value
     def request(self,operation=0,value=0,target=0,timeout=.6):
         self.serial+=1
         event=Event();m=event.message;m.type=33;m.display=self.display;m.window=self.window;m.message_type=self.command;m.format=32

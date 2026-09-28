@@ -21,6 +21,7 @@
 #include "wconfig.h"
 
 #include <stdlib.h>
+#include <string.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
@@ -36,6 +37,61 @@
 #include "cycling.h"
 #include "xinerama.h"
 #include "switchpanel.h"
+
+static int compareWindowIDs(const void *a, const void *b)
+{
+	Window left = *(const Window *)a, right = *(const Window *)b;
+	return (left > right) - (left < right);
+}
+
+/* Unlike the focus list, XID order remains stable when a window is raised.
+ * Rebuild on every step so closed/new windows cannot leave stale pointers.
+ */
+void wCycleWorkspaceWindows(WScreen *scr, long steps, Window anchor, Bool class_only)
+{
+	WWindow *wwin, *reference = wWindowFor(anchor);
+	Window *windows;
+	int count = 0, index = -1, i;
+
+	if (!steps || (class_only && (!reference || reference->screen_ptr != scr)))
+		return;
+	for (wwin = scr->focused_window; wwin; wwin = wwin->prev)
+		count++;
+	if (!count)
+		return;
+	windows = wmalloc(count * sizeof(*windows));
+	count = 0;
+	for (wwin = scr->focused_window; wwin; wwin = wwin->prev) {
+		if (wwin->frame->workspace != scr->current_workspace ||
+		    wwin->flags.internal_window || WFLAGP(wwin, no_focusable) ||
+		    WFLAGP(wwin, skip_switchpanel))
+			continue;
+		if (class_only && wwin != reference) {
+			/* Class groups independent instances, including Kitty terminals. */
+			if (reference->wm_class) {
+				if (!wwin->wm_class || strcmp(reference->wm_class, wwin->wm_class))
+					continue;
+			} else if (wwin->wm_class || !reference->wm_instance || !wwin->wm_instance ||
+			           strcmp(reference->wm_instance, wwin->wm_instance)) {
+				continue;
+			}
+		}
+		windows[count++] = wwin->client_win;
+	}
+	if (count) {
+		qsort(windows, count, sizeof(*windows), compareWindowIDs);
+		for (i = 0; i < count; i++)
+			if (windows[i] == scr->focused_window->client_win)
+				index = i;
+		if (index < 0)
+			index = steps > 0 ? count - 1 : 0;
+		index = (index + steps % count + count) % count;
+		wwin = wWindowFor(windows[index]);
+		if (wwin)
+			wWindowSingleFocus(wwin);
+	}
+	wfree(windows);
+}
 
 
 static void raiseWindow(WSwitchPanel * swpanel, WWindow * wwin)

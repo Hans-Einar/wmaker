@@ -1072,7 +1072,8 @@ out:
 
 /* Versioned request/reply interface for the optional raw-touchpad controller.
  * All actions stay in the WM, respecting live preferences and window state.
- * data: version, operation (0=query, 1=workspace, 2=shade), value, target, serial.
+ * data: version, operation (0=query, 1=workspace, 2=shade, 3=cycle,
+ * 4=cycle application), value (workspace/shade/signed steps), target, serial.
  * Reply property: version, enabled, workspace, count, focused XID, shaded, serial.
  */
 static void handleTouchpadCommand(XClientMessageEvent *event)
@@ -1100,6 +1101,8 @@ static void handleTouchpadCommand(XClientMessageEvent *event)
 			else if (!value && target->flags.shaded)
 				wUnshadeWindow(target);
 		}
+	} else if (enabled && (operation == 3 || operation == 4)) {
+		wCycleWorkspaceWindows(scr, value, (Window)event->data.l[3], operation == 4);
 	}
 	target = scr->focused_window;
 	reply[0] = 1;
