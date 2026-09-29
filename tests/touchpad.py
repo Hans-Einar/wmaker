@@ -150,16 +150,48 @@ with tempfile.TemporaryDirectory(prefix='wmaker-touchpad-test-') as tmp:
                 seen.append(focused())
             assert set(seen)==set(windows) and focused()==start
             swipe(1);assert focused()==windows[(windows.index(start)-1)%len(windows)]
-            # Releasing Ctrl mid-sequence keeps cycling; partial lift also keeps mode.
-            control=model(connection);packet(control,3);key(0xffe3,False)
-            before=focused()
-            for i in range(15):packet(control,3,-.01*(i+1))
-            assert focused()==windows[(windows.index(before)+1)%len(windows)]
-            packet(control,2,-.15);packet(control,3,-.15)
-            before=focused()
-            for i in range(15):packet(control,3,-.15-.01*(i+1))
-            assert focused()==windows[(windows.index(before)+1)%len(windows)]
-            packet(control,0)
+            key(0xffe3,False)
+            # One uninterrupted sweep: workspace -> all windows -> current class
+            # -> all windows -> another class -> workspace, without mode-change jumps.
+            for _ in windows:
+                if focused()==kitty2:break
+                connection.request(3,1)
+            assert focused()==kitty2
+            connection.request(1,1)
+            control=model(connection);packet(control,3)
+            def travel(position,direction=-1):
+                for i in range(15):packet(control,3,position+direction*.01*(i+1))
+                return position+direction*.15
+            position=travel(0,1);assert focused()==kitty2
+            def modifier(symbol,down):
+                before=connection.request()[2:5]
+                key(symbol,down)
+                control.update_modifiers()  # also polled while contacts are stationary
+                assert connection.request()[2:5]==before
+                assert control.preview.axis=='x'
+            modifier(0xffe3,True)
+            position=travel(position);assert focused()==other
+            position=travel(position);assert focused()==kitty1
+            modifier(0xffe1,True)
+            assert control.cycle_target==kitty1  # captured now, not at finger-down
+            position=travel(position);assert focused()==kitty2
+            position=travel(position);assert focused()==kitty1
+            # A partial finger lift pauses motion, but still accepts modifier changes.
+            packet(control,2,position)
+            modifier(0xffe1,False)
+            packet(control,3,position)
+            position=travel(position);assert focused()==kitty2
+            position=travel(position);assert focused()==other
+            modifier(0xffe1,True)
+            assert control.cycle_target==other  # pressing Shift again captures a new type
+            position=travel(position);assert focused()==other
+            modifier(0xffe1,False)
+            # Exercise mode detection directly in a moving contact packet too.
+            key(0xffe3,False);packet(control,3,position)
+            assert focused()==other and control.cycle_operation==0
+            position=travel(position)
+            assert connection.request()[2]==1
+            packet(control,0);connection.request(1,0)
             # Start on a Kitty, then cycle only its class across separate instances.
             for _ in windows:
                 if focused()==kitty2:break
@@ -182,7 +214,7 @@ with tempfile.TemporaryDirectory(prefix='wmaker-touchpad-test-') as tmp:
             x.XDestroyWindow(d,kitty1);x.XFlush(d);time.sleep(.1)
             before=focused();connection.request(4,1,kitty1);assert focused()==before
             assert wm.poll() is None
-            print('PASS Ctrl cycling/wrap/reverse, latched modifiers, Ctrl+Shift class filtering, workspace isolation, minimized restore/raise, stale anchor')
+            print('PASS Ctrl cycling/wrap/reverse, live modifier transitions, Shift anchor recapture, Ctrl+Shift class filtering, workspace isolation, minimized restore/raise, stale anchor')
         except Exception:
             log.flush();print((profile/'wm.log').read_text());raise
         finally:

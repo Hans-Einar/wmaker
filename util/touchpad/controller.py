@@ -21,7 +21,37 @@ class Controller:
         p.curtain_travel=args.curtain_height;p.filtered=True;p.wrap=args.wrap
         self.count=0;self.sequence=False;self.blocked=False;self.target=0;self.shaded=False
         self.current_desktop=1;self.paused_history=False
-        self.cycle_operation=0;self.cycle_position=1
+        self.cycle_operation=0;self.cycle_position=1;self.cycle_target=0
+        self.workspace_in_range=True
+    def set_mode(self,operation,state):
+        _,_,workspace,count,target,_,_=state
+        axis=self.preview.axis if self.sequence else None
+        self.cycle_operation=operation
+        self.cycle_target=target if operation==4 else 0
+        if operation:
+            # Keep an unbounded virtual step index; the WM wraps its window list.
+            self.preview.configure_bounds(2,True)
+            self.preview.desktop=1;self.cycle_position=1
+        else:
+            self.preview.configure_bounds(min(count,self.args.max_desktops),self.args.wrap)
+            self.preview.desktop=workspace+1
+        self.workspace_in_range=workspace<min(count,self.args.max_desktops)
+        self.current_desktop=workspace+1
+        # Each mode starts with zero travel at the current workspace/window.
+        # Keep a horizontal axis lock until all fingers lift.
+        self.preview.held=axis
+        self.preview.curtain=0. if self.shaded else 1.
+        self.preview.begin(3,time.monotonic())
+    def update_modifiers(self):
+        if not self.sequence or self.blocked or self.preview.axis=='y':return False
+        modifiers=self.connection.modifiers()
+        operation=(4 if modifiers & 1 else 3) if modifiers & 4 else 0
+        if operation==self.cycle_operation:return False
+        state=self.connection.request()
+        if not state or not state[1] or state[3]<1:
+            self.blocked=True;return True
+        self.set_mode(operation,state)
+        return True
     def packet(self,packet):
         if 'error' in packet:raise RuntimeError(packet['error'])
         if 'device' in packet:
@@ -39,36 +69,25 @@ class Controller:
         previous=self.count;self.count=len(contacts)
         if not self.count:
             self.preview.release();self.sequence=False;self.blocked=False;self.target=0;return
+        changed=self.update_modifiers()
         if self.blocked or self.count!=3:return
         if not self.sequence:
             state=self.connection.request()
             if not state or not state[1]:self.blocked=True;return
-            _,_,workspace,count,target,shaded,_=state
+            _,_,_,count,target,shaded,_=state
             if count<1:self.blocked=True;return
             modifiers=self.connection.modifiers()
-            self.cycle_operation=(4 if modifiers & 1 else 3) if modifiers & 4 else 0
-            if self.cycle_operation:
-                # Reuse the motion thresholds, but keep an unbounded virtual step
-                # index. Window wrapping is handled by the WM's eligible list.
-                self.preview.configure_bounds(2,True)
-                self.preview.desktop=1;self.cycle_position=1
-            else:
-                self.preview.configure_bounds(min(count,self.args.max_desktops),self.args.wrap)
-                # Do not jump into the configured range if the user is outside it.
-                if workspace>=self.preview.max_desktops:self.blocked=True;return
-                self.preview.desktop=workspace+1
-            self.current_desktop=workspace+1
+            operation=(4 if modifiers & 1 else 3) if modifiers & 4 else 0
             self.shaded=bool(shaded);self.target=target
-            self.preview.curtain=0. if shaded else 1.
-            self.preview.begin(3,time.monotonic());self.sequence=True;return
-        if previous!=3:return  # rebase when a finger joins/leaves
+            self.set_mode(operation,state);self.sequence=True;return
+        if changed or previous!=3:return  # rebase on mode changes or finger joins/leaves
         self.preview.update(3,dx,dy,time.monotonic())
         if self.preview.axis=='x' and self.cycle_operation:
             delta=self.preview.virtual_desktop-self.cycle_position
             if delta:
-                self.perform(self.cycle_operation,delta,self.target)
+                self.perform(self.cycle_operation,delta,self.cycle_target)
                 self.cycle_position=self.preview.virtual_desktop
-        elif self.preview.axis=='x' and self.preview.desktop!=self.current_desktop:
+        elif self.preview.axis=='x' and self.workspace_in_range and self.preview.desktop!=self.current_desktop:
             self.perform(1,self.preview.desktop-1,0)
             self.current_desktop=self.preview.desktop
         elif self.preview.axis=='y' and self.target:
@@ -141,8 +160,10 @@ def main():
         reader=subprocess.Popen(['sudo','-n','/usr/bin/python3',str(Path(__file__).with_name('reader.py'))],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=None,bufsize=0)
         buffer=b''
         while running:
-            ready,_,_=select.select([reader.stdout],[],[],.2)
-            if not ready:continue
+            ready,_,_=select.select([reader.stdout],[],[],.02 if controller.sequence else .2)
+            if not ready:
+                # Capture Shift's application anchor even while fingers are still.
+                controller.update_modifiers();continue
             data=os.read(reader.stdout.fileno(),65536)
             if not data:raise RuntimeError('Touchpad reader stopped')
             buffer+=data

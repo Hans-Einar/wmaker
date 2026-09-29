@@ -257,14 +257,18 @@ Let the service inherit `DISPLAY` and `XAUTHORITY` rather than hardcoding them.
 The controller waits for the WM interface to become ready, and `--no-block`
 keeps Window Maker's startup script from waiting on the controller.
 
-Hold **Ctrl** before starting a three-finger horizontal swipe to cycle windows
+Hold **Ctrl** during a three-finger horizontal swipe to cycle windows
 on the current workspace: left selects the next window, right the previous one.
 Hold **Ctrl+Shift** to cycle only windows of the focused application's type
 (WM_CLASS), including independent Kitty instances. Both modes wrap, raise and
 focus the selected window, and restore minimized/hidden windows. Windows excluded
 from the switch panel are skipped. The order stays stable as focus changes.
-Modifiers and the application anchor are captured when three contacts first
-appear and retained through partial finger lifts until all fingers are lifted.
+Modifiers can change without lifting your fingers: Ctrl switches from workspaces
+to all windows, adding Shift captures the currently focused application's type,
+releasing Shift returns to all windows, and releasing Ctrl returns to workspaces.
+Each mode change resets the travel distance without changing focus or workspace;
+continue moving to select the next item. Pressing Shift again captures a new type.
+Partial finger lifts pause motion but still allow changing modifiers.
 Unmodified horizontal swipes still switch workspaces; vertical shading is unchanged.
 
 Defaults follow Gesture Lab: 15 mm per workspace width, C=0.5, 5 mm axis-lock
@@ -305,5 +309,5 @@ payload races. The WM rechecks the opt-in preference and target state per action
 Validation: `python3 tests/touchpad.py` runs real fork binaries in private Xvfb
 sessions with synthetic contact frames. It covers disabled preference, workspace
 limits/wrap, pause/resume, one/two-finger exclusion, shade/unshade, target changes,
-destroyed targets, Ctrl/Ctrl+Shift cycling, latched modifiers, workspace isolation,
+destroyed targets, Ctrl/Ctrl+Shift cycling, live modifier changes, workspace isolation,
 and minimized-window restoration and raising. It never opens the real input device.

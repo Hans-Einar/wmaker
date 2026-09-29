@@ -10,7 +10,9 @@ implemented changes on `master`; this is not a published release.
 - **Touchpad window cycling:** Ctrl + three-finger left/right swipe raises and
   focuses the next/previous window on the current workspace. Ctrl+Shift limits
   cycling to the focused application's class. Both modes wrap in a stable order
-  and restore minimized/hidden windows; modifiers are captured at gesture start.
+  and restore minimized/hidden windows. Modifiers can change during one continuous
+  swipe; entering Ctrl+Shift captures the app currently in focus. Mode changes
+  reset travel without jumping, and releasing Ctrl resumes workspace switching.
 
 - **Close windows from previews:** an immediate hover close button sends the
   normal application close request. Closed thumbnails and empty workspace
